@@ -20,9 +20,10 @@ body {
 	content: " ";
 	clear: both;
 	height: 0;
-	}
-* html .clearfix             { zoom: 1; } /* IE6 */
-*:first-child+html .clearfix { zoom: 1; } /* IE7 */
+}
+/* These are needed for IE6 and 7 but don't validate. */	
+/* * html .clearfix             { zoom: 1; } /* IE6 */
+/* *:first-child+html .clearfix { zoom: 1; } /* IE7 */
 
 /* site specific */
 .header {
@@ -30,7 +31,7 @@ body {
 	/*rgb(243,233,197);*/
 	border-bottom: 1px gray solid;
 	width: 100%;
-	font-family: "Dosis" "Helvetica";
+	font-family: "Dosis","Helvetica";
 	font-size: 1.2em;
 	min-width: 19em;
 }
