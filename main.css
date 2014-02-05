@@ -34,6 +34,7 @@ body {
 	font-family: "Dosis","Helvetica";
 	font-size: 1.2em;
 	min-width: 19em;
+	/*margin-bottom: 4em;*/
 }
 
 .header a {
@@ -62,5 +63,11 @@ body {
 
 .header-link {
 	margin-left: 1em;
+}
+
+a.selected-header-link {
+	color: #266a95;
+	border-bottom: 2px #266a95 solid;
+	margin-left: 0;
 }
 
