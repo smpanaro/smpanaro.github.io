@@ -8,6 +8,23 @@ body {
 	padding: 0;
 	margin: 0;
 	background-color: #fbfbfb;
+	font-family: "Avenir Next", Nunito, "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+@font-face {
+	font-family: "Dosis";
+	src: url("fonts/Dosis-Regular.ttf");
+}
+
+@font-face {
+	font-family: "Nunito";
+	src: url("fonts/Nunito-Light.ttf");
+}
+
+@font-face {
+	font-family: "Nunito";
+	src: url("fonts/Nunito-Regular.ttf");
+	font-weight: bold;
 }
 
 /* General utility rules */
@@ -37,7 +54,7 @@ body {
 	/*rgb(243,233,197);*/
 	border-bottom: 1px gray solid;
 	width: 100%;
-	font-family: "Dosis","Helvetica";
+	font-family: "Dosis";
 	font-size: 1.2em;
 	min-width: 19em;
 	/*margin-bottom: 4em;*/
