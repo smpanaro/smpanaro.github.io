@@ -8,6 +8,6 @@ I spent approximately 8 hours working on this assignment.
 
 Credits
 -------
-Simple Icons - https://github.com/danleech/simple-icons
-Dosis Font - http://www.impallari.com/dosis
-Nunito Font - http://www.google.com/fonts/specimen/Nunito
+Simple Icons - https://github.com/danleech/simple-icons  
+Dosis Font - http://www.impallari.com/dosis  
+Nunito Font - http://www.google.com/fonts/specimen/Nunito  
