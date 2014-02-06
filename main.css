@@ -13,17 +13,17 @@ body {
 
 @font-face {
 	font-family: "Dosis";
-	src: url("fonts/Dosis-Regular.ttf");
+	src: url("fonts/dosis-regular.ttf");
 }
 
 @font-face {
 	font-family: "Nunito";
-	src: url("fonts/Nunito-Light.ttf");
+	src: url("fonts/nunito-light.ttf");
 }
 
 @font-face {
 	font-family: "Nunito";
-	src: url("fonts/Nunito-Regular.ttf");
+	src: url("fonts/nunito-regular.ttf");
 	font-weight: bold;
 }
 
