@@ -1,0 +1,23 @@
+.header {
+	font-size: 1.05em;
+}
+
+.inner-header {
+	margin: 0 auto;
+	max-width: 42.5em;
+	/*max-width: 15em;*/
+	padding: 1em 0.5em;
+}
+
+.header a {
+	font-size: 1.1em;
+}
+
+.content {
+	/* Move content closer to the header when we're on smaller screens. */
+	padding-top: 2em;
+}
+
+.content-container {
+	padding: 1em;
+}
