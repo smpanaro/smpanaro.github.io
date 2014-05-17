@@ -12,11 +12,6 @@ body {
 }
 
 @font-face {
-	font-family: "Dosis";
-	src: url("fonts/dosis-regular.ttf");
-}
-
-@font-face {
 	font-family: "Nunito";
 	src: url("fonts/nunito-light.ttf");
 }
@@ -44,20 +39,17 @@ body {
 	clear: both;
 	height: 0;
 }
-/* These are needed for IE6 and 7 but don't validate. */	
+/* These are needed for IE6 and 7 but don't validate. */
 /* * html .clearfix             { zoom: 1; } /* IE6 */
 /* *:first-child+html .clearfix { zoom: 1; } /* IE7 */
 
 /* site specific */
 .header {
 	background-color: #f2f2f2;
-	/*rgb(243,233,197);*/
 	border-bottom: 1px gray solid;
 	width: 100%;
-	font-family: "Dosis";
 	font-size: 1.2em;
 	min-width: 19em;
-	/*margin-bottom: 4em;*/
 }
 
 .header a {
@@ -66,9 +58,11 @@ body {
 }
 
 .header a:hover {
-	/*color: #266a95;*/
 	border-bottom: 2px #266a95 solid;
-	/*#5d5d5d;*/
+}
+
+.header-tilde {
+	font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 .inner-header {
@@ -86,3 +80,10 @@ a.selected-header-link {
 	border-bottom: 2px #266a95 solid;
 }
 
+.mobile-header-menu {
+	display:none;
+}
+
+.mobile-link-list {
+	display:none;
+}

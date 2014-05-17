@@ -11,15 +11,24 @@
 </head>
 
 <body>
+	<ul class="mobile-link-list">
+		<li><a class="mobile-link" href="bio.html">about</a></li>
+		<li><a class="mobile-link" href="projects.html">projects</a></li>
+		<li><a class="mobile-link" href="resume.html">resume</a></li>
+	</ul>
+
 	<div class="header">
 		<div class="inner-header clearfix">
 			<div class="float-left header-name">
-				<a class="header-name" href="/">~/steve</a>
+				<a class="header-name" href="/"><span class="header-tilde">~</span>/steve</a>
 			</div>
 			<div class="float-right header-link-group">
-				<a class="selected-header-link header-link" href="bio.html">About</a>
-				<a class="header-link" href="projects.html">Projects</a>
-				<a class="header-link" href="resume.html">Resume</a>
+				<a class="header-link" href="bio.html">about</a>
+				<a class="header-link" href="projects.html">projects</a>
+				<a class="header-link" href="resume.html">resume</a>
+			</div>
+			<div class="float-right mobile-header-menu">
+				<a class="header-link"><span class="menu-arrow">▼</span>menu</a>
 			</div>
 		</div>
 	</div>
@@ -35,6 +44,9 @@
 		</div>
 	</div>
 
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+	<script>window.jQuery || document.write('<script src="js/jquery-1.11.1.min.js"><\/script>')</script>
+	<script src="js/main.js"></script>
 	<script>
 		(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
 		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
