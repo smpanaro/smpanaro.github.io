@@ -5,7 +5,5 @@
     var arrow = $(".menu-arrow");
     if (arrow.text() == "▼") arrow.text("▲");
     else arrow.text("▼");
-
-    // $(".mobile-header-menu")
   });
 })()
