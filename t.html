@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<title>T Shortcuts</title>
+	<link rel="stylesheet" type="text/css" href="t.css">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="apple-touch-icon" href="img/t-webclip-icon.png">
+	<script>
+	function onload() {
+		var hr = (new Date()).getHours();
+		if (hr >= 20 || hr < 8) { // it's night time-ish
+			document.getElementsByTagName("body")[0].className += " night";
+		}
+	}
+	</script>
+</head>
+
+<body onload=onload()>
+	<h2>trackthet.com Shortcuts</h2>
+	<ul class="wrapper">
+		<li class="box">
+			<a href="http://www.trackthet.com/index.php?routeId=96&dirId=96_1_var0&stopId=5035&update=true">
+				<p class="top">Wedgemere</p>
+				<p class="middle">↓</p>
+				<p class="bottom">Porter</p>
+			</a>
+		</li>
+		<li class="box">
+			<a href="http://www.trackthet.com/index.php?routeId=96&dirId=96_0_var0&stopId=23151&update=true">
+				<p class="top">Porter</p>
+				<p class="middle">↓</p>
+				<p class="bottom">Wedgemere</p>
+			</a>
+		</li>
+		<li class="box">
+			<a href="http://www.trackthet.com/index.php?routeId=96&dirId=96_0_var0&stopId=5104&update=true">
+				<p class="top">Davis</p>
+				<p class="middle">↓</p>
+				<p class="bottom">Memorial Steps</p>
+			</a>
+		</li>
+		<li class="box">
+			<a href="http://www.trackthet.com/index.php?routeId=96&dirId=96_1_var0&stopId=2379&update=true">
+				<p class="top">Memorial Steps</p>
+				<p class="middle">↓</p>
+				<p class="bottom">Davis</p>
+			</a>
+		</li>
+	</ul>
+</body>
+
+</html>

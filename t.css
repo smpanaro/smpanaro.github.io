@@ -1,0 +1,77 @@
+/* Color Scheme: http://www.colourlovers.com/palette/702402/One_Year_of_Love */
+body {
+	background-color: #E6E1C2; /*day*/
+	color: white;
+	font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+body.night {
+	background-color: #1E2528;
+}
+
+.wrapper {
+    max-width: 420px;
+    height: auto;
+    padding: 0;
+}
+
+.box {
+    display: inline-block;
+    position: relative;
+    width: 200px;
+    height: 200px;
+    background: #BF0A0D;
+    z-index: 0;
+    margin: 2px 2px 2px -2px;
+    transition: all .15s ease-in-out;
+    border-radius: 0.2em;
+    cursor: pointer;
+}
+
+.box:hover {
+    background: #7E1C13;
+    z-index: 100;
+    transform: scale(1.2,1.2);
+    box-shadow: 0 5px 10px 0 rgba(0,0,0,.2);
+}
+
+.box a {
+	text-decoration: none;
+	color: inherit;
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.box p {
+	margin: 0;
+	padding: 0;
+	text-align: center;
+}
+
+.box p.top {
+	padding-top: 30%;
+}
+
+.box p.bottom {
+	padding-bottom: 30%;
+}
+
+h2 {
+	color: #1E2528;
+}
+
+body.night h2 {
+	color: white;
+}
+
+@media only screen and (max-width: 50em) {
+	.wrapper {
+		max-width: 100%;
+	}
+
+	.box {
+		width: 48%;
+		height: 48%;
+	}
+}
