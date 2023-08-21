@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="author" content="Stephen Panaro">
+    <meta name="keywords" content="Stephen Panaro, blog">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="No Frills Time Series Compression That Also Works">
+    <!-- <meta property="og:image" content=""> -->
+    <meta property="og:description"
+        content="So you have some time series data and want to make it smaller? You may not need an algorithm designed specifically for time series…">
+    <title>No Frills Time Series Compression That Also Works</title>
+
+    <style>
+        body {
+            font-family: -apple-system, Arial, Helvetica, sans-serif;
+            font-size: 16px;
+            line-height: 22px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #191919;
+                color: #f6f6f6;
+            }
+        }
+
+        a {
+            color: unset;
+        }
+
+        header div {
+            display: flex;
+            gap: 8px;
+        }
+
+        article {
+            max-width: 600px;
+        }
+
+        h1 {
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            margin-top: 48px;
+        }
+
+        img {
+            max-width: 100%;
+        }
+
+        code {
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        span.subhead {
+            opacity: 0.5;
+            font-style: italic;
+        }
+
+        .block-center {
+            display: block;
+            margin: auto;
+        }
+
+        .image-caption {
+            opacity: 0.6;
+        }
+
+        table {
+            margin: 40px 0;
+        }
+
+        /* sequence is for showing multiple related things side-by-side or stacked vertically on small screens. */
+        .sequence {
+            margin: 40px 0;
+
+            display: flex;
+            gap: 16px;
+        }
+
+        .sequence> :not(:first-child) {
+            padding-left: 16px;
+            border-left: 1px dashed;
+        }
+
+        @media screen and (max-width: 450px) {
+            .sequence {
+                flex-direction: column;
+                margin: auto;
+                align-items: flex-start;
+            }
+
+            .sequence-rotate-90 {
+                transform: rotate(90deg);
+            }
+
+            .sequence> :not(:first-child) {
+                padding-left: 0;
+                border-left: none;
+
+                padding-top: 16px;
+                border-top: 1px dashed;
+            }
+        }
+
+        /* style all results the same */
+        table.results-table {
+            border-collapse: collapse;
+        }
+
+        table.results-table th {
+            text-align: left;
+            font-size: 12px;
+            opacity: 0.6;
+            white-space: nowrap;
+        }
+
+        table.results-table td,
+        table.results-table th {
+            padding: 4px 8px;
+        }
+
+        table.results-table th {
+            padding-left: 0px;
+            padding-right: 20px;
+        }
+
+        /* table.results-table th, */
+        table.results-table> :not(tfoot) td {
+            border: 1px solid;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div>
+            <span>stephen &bull;</span>
+            <a href="/">home</a>
+            <a href="/blog">blog</a>
+            <a href="/feed.xml">rss</a>
+        </div>
+    </header>
+
+    <article>
+        <h1>
+            No Frills Time Series Compression That Also Works
+        </h1>
+        <span class="subhead">CSV + gzip will take you far. &bull; Aug XX, 2023</span>
+
+
+        <p>
+            So you have some time series data and you want to make it smaller?
+            You may not need an algorithm designed specifically for time series.
+            Generic compressors like gzip work quite well and are much easier to
+            use.
+        </p>
+        <p>
+            Of course this depends on your data, so there’s some code you can
+            use to try it out <a href="https://github.com/smpanaro/time-series-compression">here</a>.
+        </p>
+
+        <hr />
+
+        <p>
+            Recently I started working on a way to save Bluetooth scale data in
+            my iOS coffee-brewing app. I want to allow people to record from a
+            scale during their coffee-brewing sessions and then view it
+            afterwards. Scale data is just a bunch of timestamps and weight
+            values. Simple, yes, but it felt like something that might take a
+            surprising amount of space to save. So I did some napkin math:
+        </p>
+
+        <div class="sequence">
+            <code style="white-space: nowrap;">
+                1 scale session / day
+                <br />
+                10 minutes / session
+                <br />
+                10 readings / second
+                <br />
+                = 2.19M readings / year
+            </code>
+            <code style="white-space: nowrap;">
+                1 reading = 1 date + 1 weight
+                <br />
+                = 1 uint64 + 1 float32
+                <br />
+                = 12 bytes
+                <br />
+                2.19M * 12B = 26 MB
+            </code>
+        </div>
+
+        <p>
+            26 MB per year is small by most measures. However in my case I keep
+            a few extra copies of my app’s data around as backups so this is
+            more like ~100MB/year. It’s also 40x the size of what I’m saving
+            currently! This puts my app in danger of landing on the one Top Apps
+            list I would not be stoked to be featured on:
+        </p>
+
+
+        <img class="block-center" src="/static/blog/time-series-compression/icloud-settings.jpg"
+            style="max-height: 350px; border-radius: 4px;" alt="iCloud storage usage in iOS Settings app" />
+        <sub class="block-center image-caption" style="text-align: center;">iCloud storage usage</sub>
+
+        <p>
+            So let’s avoid that. At a high-level I see two options:
+        </p>
+
+        <p>
+            <b>Save less.</b> 10 scale readings/second is probably more
+            granularity than we’ll ever need. So we could just not save some of
+            them. Of course if I’m wrong about that, they’re gone forever and
+            then we’ll be out of luck.
+        </p>
+
+        <p>
+            <b>Save smaller.</b> Looking at some example data, there are a lot
+            of plateaus where the same value repeats over and over. That seems
+            like it could compress well.
+        </p>
+
+        <img class="block-center" src="/static/blog/time-series-compression/session-graph.jpg"
+            style="border-radius: 10px; max-height: 250px;" alt="Example brewing session time series chart" />
+        <sub class="block-center image-caption" style="text-align: center;">Example brewing session time series</sub>
+
+        <h2>Picking Ways to Compress</h2>
+        <p>
+            This is my first rodeo with compression. I’m starting from basics
+            like “compression makes big things small” and “double click to
+            unzip”. Doing a little research seems like a good idea and it pays
+            off.
+        </p>
+
+        <p>
+            My scale data is technically “time series data” and it turns out we
+            are not the first to want to compress it. There is a whole family
+            of algorithms designed specifically for time series. This <a
+                href="https://www.timescale.com/blog/time-series-compression-algorithms-explained/">blog post</a>
+            is a great deep dive, but for our purposes today we’ll be looking at
+            two of the algorithms it mentions:
+        </p>
+        <ul>
+            <li><i>simple-8b</i> which compresses sequences of integers</li>
+            <li><i>Gorilla</i> which compresses both integers as well as floating point numbers</li>
+        </ul>
+
+        <p>
+            Algorithms designed for exactly my problem space sound ideal.
+            However something else catches my eye in a <a
+                href="https://news.ycombinator.com/item?id=31385515">comment</a> about the same
+            blog post:
+        </p>
+
+        <blockquote>
+            <div style="opacity: 0.5;">rklaehn on May 15, 2022</div>
+            I have found that a very good approach is to apply some very simple
+            transformations such as delta encoding of timestamps, and then
+            letting a good standard compression algorithm such as zstd or
+            deflate take care of the rest.
+        </blockquote>
+
+        <p>
+            Using a general purpose algorithm is quite intriguing! One thing
+            I’ve noticed is that there are no Swift implementations for
+            simple-8b or Gorilla. This means I would have to wrap an existing
+            implementation (a real hassle) or write a Swift one (risky, I would
+            probably mess it up). General purpose algorithms are much more
+            common and side-step both of those issues.
+        </p>
+
+        <p>
+            So we’ll look at both. For simplicity I’ll call simple-8b and Gorilla the “specialist algorithms” and
+            everything
+            else “generalist”.
+        </p>
+
+        <h2>Evaluating the Specialist Algorithms</h2>
+        <p>
+            Starting with the specialists seems logical. I expect they will
+            perform better which will give us a nice baseline for comparison.
+            But first we need to smooth out a few wrinkles.
+        </p>
+
+        <h3>Precision</h3>
+
+        <p>
+            While wiring up an open-source simple-8b implementation I realize that
+            it requires integers and both our timestamp and weight are floating
+            point numbers. To solve this we’ll truncate to milliseconds and
+            milligrams. A honey bee can flap its wings in 5 ms. A grain of salt is
+            approximately 1mg. Both of these feel way more precise than necessary
+            but better to err on that side anyways.
+        </p>
+
+        <div class="sequence">
+            <code>
+                49.0335097 seconds
+                <br />
+                17.509999999999998 grams
+            </code>
+            <code>
+                49033 milliseconds
+                <br />
+                17509 milligrams
+            </code>
+        </div>
+
+        <p>
+            We’ll use this level of precision for all our tests except Gorilla, which is designed for
+            floating point
+            numbers.
+        </p>
+
+        <h3>Negative Numbers</h3>
+        <p>
+            Negative numbers show up semi-frequently in scale data because any time
+            you pick something up off a scale it will drop below zero.
+        </p>
+
+        <p>
+            Unfortunately for us simple-8b doesn’t like negative numbers. Why?
+            Let’s take a little detour and look at how computers store numbers.
+            They end up as sequences of 1s and 0s like:
+        </p>
+
+        <code style="display: block; margin: 30px 0;">
+            0000000000010110 is 22
+            <br />
+            0000000001111011 is 123
+            <br />
+            0000000101011110 is 350
+        </code>
+
+        <p>
+            You’ll notice that these tend to have all their 1s all on the right.
+            In fact, only very large numbers will have 1s on the left. simple-8b
+            does something clever where it uses 4 of the leftmost spaces to
+            store some 1s and 0s of its own. This is fine for us. We’re not
+            storing huge numbers so those leftmost spaces will always be 0 in
+            our data.
+        </p>
+
+        <p>
+            Now let’s look at some negatives.
+        </p>
+
+        <code style="display: block; margin: 30px 0;">
+            1111111111101010 is -22
+            <br />
+            1111111110000101 is -123
+            <br />
+            1111111010100010 is -350
+        </code>
+
+        <p>
+            This is not great, the left half is all 1s! Simple-8b has no way of
+            knowing whether the leftmost 1 is something it put there or
+            something we put there so it will refuse to even try to compress
+            these.
+        </p>
+
+        <p>
+            One solution for this is something called ZigZag encoding. If you
+            look at the first few positive numbers, normally they’ll look like
+            this:
+        </p>
+
+        <code style="display: block; margin: 30px 0;">
+            0000000000000001 is 1
+            <br />
+            0000000000000010 is 2
+            <br />
+            0000000000000011 is 3
+            <br />
+            0000000000000100 is 4
+        </code>
+
+        <p>
+            ZigZag encoding interleaves the negative numbers in between so now
+            these same 0/1 sequences take on a new meaning and zig zag between
+            negative and positive:
+        </p>
+
+        <code style="white-space: pre-line; display: block; margin: 30px 0;">
+            0000000000000001 is -1 <i>zig</i>
+            0000000000000010 is &nbsp;1 <i>zag</i>
+            0000000000000011 is -2 <i>zig</i>
+            0000000000000100 is &nbsp;2 <i>zag</i>
+        </code>
+
+        <p>
+            If we look at our negative numbers from earlier, we can see that
+            this gets rid of our problematic left-side 1s.
+        </p>
+
+        <div style="overflow: auto;">
+            <table>
+                <tr style="text-align: left; font-size: 14px;">
+                    <th>#</th>
+                    <th style="padding: 0 16px; border-left: 1px dashed;">Normal</th>
+                    <th style="padding-left: 16px; border-left: 1px dashed;">
+                        ZigZag
+                    </th>
+                </tr>
+                <tr>
+                    <td style="padding-right: 16px;">
+                        <code>
+                    -22
+                    <br />
+                    -123
+                    <br />
+                    -350
+                    </code>
+                    </td>
+                    <td style="padding: 0 16px; border-left: 1px dashed;">
+                        <code>
+                    1111111111101010
+                    <br />
+                    1111111110000101
+                    <br />
+                    1111111010100010
+                    </code>
+                    </td>
+                    <td style="padding-left: 16px; border-left: 1px dashed;">
+                        <code>
+                    <u>0000000000</u>101011
+                    <br />
+                    <u>00000000</u>11110101
+                    <br />
+                    <u>000000</u>1010111011
+                    </code>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <p>
+            We only need this for simple-8b, but it can be used with other
+            integer encodings too. Kinda cool!
+        </p>
+
+        <h3>Pre-Compression</h3>
+        <p>
+            Technically we could run our tests now, but we’re going to do two
+            more things to eke out a little extra shrinkage.
+        </p>
+
+        <p>
+            First is delta encoding. The concept is simple: you replace each
+            number in your data set with the difference (delta) from the
+            previous value.
+        </p>
+
+        <div class="sequence">
+            <code>
+                timestamp,mass
+                <br />
+                1691452800000,250
+                <br />
+                1691452800103,253
+                <br />
+                1691452800305,279
+                <br />
+                &hellip;
+                </code>
+            <div class="sequence-rotate-90" style="padding: 0 32px; margin: auto 0; border: none;">
+                &rightarrow;
+            </div>
+            <code style="border: none; padding: 0;">
+                timestamp_delta,mass_delta
+                <br />
+                1691452800000,250
+                <br />
+                103,3
+                <br />
+                202,26
+                <br />
+                &hellip;
+            </code>
+        </div>
+
+        <p>
+            Visually these already look smaller. Amusingly enough they actually
+            are smaller. We’ll use this for all algorithms except Gorilla which
+            does delta encoding for us.
+        </p>
+
+        <p>
+            The second tweak relates to the ordering of our data. So far we’ve
+            been talking about time series as pairs of (timestamp, mass) points.
+            Both specialist algorithms require us to provide a single list of
+            numbers. We have two choices to flatten our pairs:
+        </p>
+
+        <code style="display: block; margin: 30px 0;">
+            <b>Choice 1</b>: [first_timestamp, first_mass, second_timestamp, second_mass, &hellip;]
+            <br />
+            <b>Choice 2</b>: [first_timestamp, second_timestamp, … last_timestamp, first_mass, second_mass, &hellip;]
+        </code>
+
+        <p>
+            Choice 2 compresses better on all algorithms (generalist too) even
+            when we apply it after delta encoding. Again, Gorilla does its own
+            thing–are you seeing the trend?
+        </p>
+
+        <h3>Specialist Results</h3>
+        <p>
+            We’ve truncated and pre-encoded, so let’s see some results.
+        </p>
+
+        <div style="overflow: auto;">
+            <table class="results-table" style="margin-bottom: 20px;">
+                <thead>
+                    <tr>
+                        <th>Algorithm</th>
+                        <th>Ratio 1</th>
+                        <th>Ratio 2</th>
+                        <th>Ratio 3</th>
+                        <th>Avg. Ratio</th>
+                        <th>Avg. MB/year</th>
+                    </tr>
+                </thead>
+                <tr>
+                    <td>simple-8b</td>
+                    <td>6.92</td>
+                    <td>5.4</td>
+                    <td>7.18</td>
+                    <td>6.5</td>
+                    <td>4</td>
+                </tr>
+                <tr>
+                    <td>gorilla</td>
+                    <td>6.72</td>
+                    <td>4.18</td>
+                    <td>6.88</td>
+                    <td>5.9</td>
+                    <td>4.4</td>
+                </tr>
+                <tfoot>
+                    <tr style="font-size: 12px; opacity: 0.6;">
+                        <td></td>
+                        <td colspan="4">
+                            <div style="display: flex;">
+                                &RightTee; <span style="flex: 1; text-align: center;">higher is better</span>
+                                &LeftTee;
+                            </div>
+                        </td>
+                        <td>
+                            <div style="display: flex; line-height: 14px;">
+                                lower is better
+                            </div>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <p>
+            I tested with three different types of scale recordings for a bit of
+            variety, then backed out the MB/year from the average compression
+            ratio. Going from 26 MB/year to under 5 is a great result!
+
+        <h2>&hellip; and the Generalist Ones</h2>
+        <p>
+            Similar to the specialist algorithms, we have a few
+            choices to make before we can run our tests on the generalists.
+        </p>
+
+        <h3>Formatting</h3>
+
+        <p>
+            For simplicity we’re going to format our data as CSV. This might seem a little odd but it has a
+            few perks:
+        </p>
+        <ul>
+            <li>It’s human-readable which is nice for debugging.</li>
+            <li>It’s also fairly compact as far as text representations go.</li>
+            <li>Most languages have native libraries to make reading/writing CSVs easy. <sup
+                    style="opacity: 0.6;">(alas,
+                    Swift does
+                    not)</sup></li>
+        </ul>
+
+        <p>
+            We’ll use delta encoding like above–it’d be silly not to. We could
+            really stretch the definition of CSV and stack all of the timestamps
+            on top of all the masses into a single column, but that sacrifices a
+            bit of readability so we won’t.
+        </p>
+
+        <h3>Picking Algorithms</h3>
+
+        <p>
+            There are a lot of general purpose compression algorithms. One
+            popular benchmark lists over 70! We’re going to pick just 5. They
+            are:
+        </p>
+        <ul>
+
+            <li>
+                <b>zlib</b>, <b>LZMA</b>, and <b>LZFSE</b> – these come built-in with iOS which makes
+                my life easier. zlib and LZMA are also fairly common.
+            </li>
+            <li>
+                <b>Zstandard</b> (aka zstd) and <b>Brotli</b> – from Facebook and Google
+                respectively, both companies with an interest in good
+                compression
+            </li>
+        </ul>
+
+        <h3>Picking Levels</h3>
+
+        <p>
+            We’ve narrowed it down from 70 to 5, but there’s another curveball.
+            Unlike the specialist algorithms which have no configuration
+            options, most generalist algorithms let you choose a level that
+            trades off speed for better compression. You can compress fast or
+            slow down to compress more.
+        </p>
+
+        <p>
+            For simplicity (and so I don’t have to show you a table with 40+
+            rows) we are not going to test all 11 Brotli levels or all 20+ zstd
+            levels. Instead we’re going to choose levels that run at about the
+            same speed. Apple makes this easier for us since LZFSE has no level
+            and iOS only has zlib 5 and LZMA 6. All we have to do is pick levels
+            for Brotli and zstd from this chart.
+        </p>
+
+        <img class="block-center" src="/static/blog/time-series-compression/speed-chart.png" style="border-radius: 4px;"
+            alt="Chart of speed benchmarks for our 5 algorithms at various levels" />
+        <sub class="block-center image-caption" style="text-align: center;">Speed benchmarks for our 5
+            algorithms</sub>
+
+        <p>
+            We’ll use Brotli 4 and zstd 5 since those are in-line with the
+            fastest iOS algorithm. This means that zlib and LZMA are slightly
+            advantaged but we’ll keep that in mind.
+        </p>
+
+        <h3>Generalist Results</h3>
+
+        <p>
+            We’ve prepped our CSV and made all our choices, so let’s see some results.
+        </p>
+
+        <div style="overflow: auto;">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Algorithm</th>
+                        <th>Ratio 1</th>
+                        <th>Ratio 2</th>
+                        <th>Ratio 3</th>
+                        <th>Avg. Ratio</th>
+                        <th>Avg. MB/year</th>
+                    </tr>
+                </thead>
+                <tr>
+                    <td>zlib 5</td>
+                    <td>8.50</td>
+                    <td>5.79</td>
+                    <td>8.18</td>
+                    <td>7.49</td>
+                    <td>3.47</td>
+                </tr>
+                <tr>
+                    <td>lzma 6</td>
+                    <td>8.12</td>
+                    <td>5.55</td>
+                    <td>7.49</td>
+                    <td>7.1</td>
+                    <td>3.7</td>
+                </tr>
+                <tr>
+                    <td>zstd 5</td>
+                    <td>7.49</td>
+                    <td>5.71</td>
+                    <td>7.74</td>
+                    <td>6.98</td>
+                    <td>3.72</td>
+                </tr>
+                <tr>
+                    <td>brotli 4</td>
+                    <td>7.84</td>
+                    <td>5.52</td>
+                    <td>7.53</td>
+                    <td>6.96</td>
+                    <td>3.74</td>
+                </tr>
+                <tr>
+                    <td>lzfse</td>
+                    <td>7.49</td>
+                    <td>5.36</td>
+                    <td>7.12</td>
+                    <td>6.7</td>
+                    <td>3.8</td>
+                </tr>
+                <tfoot>
+                    <tr style="font-size: 12px; opacity: 0.6;">
+                        <td></td>
+                        <td colspan="4">
+                            <div style="display: flex;">
+                                &RightTee; <span style="flex: 1; text-align: center;">higher is better</span>
+                                &LeftTee;
+                            </div>
+                        </td>
+                        <td>
+                            <div style="display: flex; line-height: 14px;">
+                                lower is better
+                            </div>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <!--
+            Split CSV
+            algorithm
+            ratio1
+            ratio2
+            ratio3
+            avg
+            Avg MB/year
+            zlib 5
+            9.61
+            6.56
+            8.98
+            8.38
+            3.1
+            lzma 6
+            9.31
+            6.31
+            8.40
+            8
+            3.25
+            zstd 5
+            10.70
+            6.95
+            9.61
+            9.09
+            2.86
+            brotli 4
+            10.47
+            6.87
+            9.57
+            8.97
+            2.9
+            lzfse
+            8.80
+            6.05
+            8.18
+            7.67
+            3.39
+            -->
+
+
+        <p>
+
+            Wow! Everything is under 4MB. Coming from 26MB this is fantastic.
+        </p>
+
+        <h2>Specialist v. Generalist</h2>
+
+        <p>
+            I’ve plotted everything side-by-side:
+        </p>
+
+        <img class="block-center" src="/static/blog/time-series-compression/compression-chart-2.png"
+            style="border-radius: 4px;" alt="Chart of MB/year by algorithm" />
+        <sub class="block-center image-caption" style="text-align: center;">MB/year by algorithm</sub>
+
+        <p>
+            Weirdly, the generalist algorithms universally beat the specialists.
+            On top of that, you’ll recall we picked generalist levels that were
+            fairly fast. So we can actually widen the gap if we’re willing to
+            compress slower.
+        </p>
+
+        <p>
+            That feels like cheating, but doing the single column CSV doesn’t.
+            Plus I’m really curious about that, so here it is:
+        </p>
+
+        <img class="block-center" src="/static/blog/time-series-compression/compression-chart-3.png"
+            style="border-radius: 4px;" alt="Chart of MB/year by algorithm including single column CSV results" />
+        <sub class="block-center image-caption" style="text-align: center;">MB/year by algorithm including single
+            column
+            CSV
+            results</sub>
+
+        <p>
+            Seems like if you’re not a CSV purist you can squeeze an extra 400KB or so. Not bad.
+        </p>
+
+        <h2>What Gives?</h2>
+
+        <p>
+            It really does not make sense to me that the generalist algorithms come out on top.
+        </p>
+
+        <p>
+            It’s possible I made a mistake somewhere. To check this, I look to
+            see if every compressed time series can be reversed back to the
+            original scale time series. They all can.
+        </p>
+
+        <p>
+            My second guess is that maybe my time series data is not well-suited
+            for simple-8b and Gorilla. I saw mention that equally spaced
+            timestamps are preferred and my data is anything but:
+        </p>
+
+
+        <table>
+            <tr>
+                <td>
+                    <code>timestamps</code>
+                </td>
+                <td style="padding-left: 16px;">
+                    <code>deltas</code>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding-right: 16px;">
+                    <code>
+                        <span style="opacity: 0.4;">1691685057</span>323
+                        <br />
+                        <span style="opacity: 0.4;">1691685057</span>413
+                        <br />
+                        <span style="opacity: 0.4;">1691685057</span>504
+                        <br />
+                        <span style="opacity: 0.4;">1691685057</span>622
+                        <br />
+                        <span style="opacity: 0.4;">1691685057</span>732
+                    </code>
+                </td>
+                <td style="padding-left: 16px; border-left: 1px dashed;">
+                    <code>
+                        n/a
+                        <br />
+                        90
+                        <br />
+                        91
+                        <br />
+                        118
+                        <br />
+                        110
+                    </code>
+                </td>
+            </tr>
+        </table>
+
+        <p>
+            To see if this is the problem, I re-run the benchmarks and truncate
+            timestamps to the nearest 0.01s, 0.1s and even 1s. This ensures that
+            there is a finite sized set of delta values (101, 11 and 2
+            respectively).
+        </p>
+
+        <img class="block-center" src="/static/blog/time-series-compression/granularity-chart.png"
+            style="border-radius: 4px;" alt="Chart of compression ratio by timestamp granularity" />
+        <sub class="block-center image-caption" style="text-align: center;">Compression ratio by timestamp
+            granularity</sub>
+
+        <!--
+        algo
+        0.001s (original)
+        0.01s
+        0.1s
+        1s
+        simple-8b
+        6.92
+        9.60
+        14.07
+        14.15
+        gorilla
+        6.72
+        7.21
+        11.39
+        12.26
+        lzfse
+        8.80
+        12.48
+        17.69
+        26.76
+        -->
+
+        <p>
+
+
+            As expected this does improve the compression ratio of the specialist algorithms. But it also
+            gives a
+            similar
+            boost to the generalist one. So it doesn’t explain the difference.
+        </p>
+
+        <p>
+
+            I don’t have a third guess. Maybe it is real?
+        </p>
+
+        <h2>Back to Where We Started</h2>
+
+        <p>
+            This all started since I was anxious about inflating the size of my
+            humble iOS app. Our baseline was adding 26MB of new data each year,
+            which became ~100MB/year in iCloud. With a general purpose
+            compression algorithm it looks like we can get these numbers down to
+            ~4MB and ~16MB per year respectively. Much better.
+        </p>
+
+        <p>
+            Any of the generalist algorithms would work. In my case using one of Apple’s built-ins is an
+            easy choice:
+        </p>
+        <ul>
+            <li>
+                It’s ~1 line of code to implement them. <sup style="font-size: 12px; opacity: 0.6;">Plus a few lines
+                    to
+                    make a CSV.</sup>
+            </li>
+            <li>
+                Using Brotli or zstd would increase my app’s download size by 400-700 KB. Not a lot but avoiding
+                it is nice.
+            </li>
+        </ul>
+
+        <h2>Try It at Home</h2>
+
+        <p>
+            One thing we didn’t touch on is that the distribution of your data
+            can impact how well the compression works. It’s possible these
+            results won’t translate to your data. To help check that, I’ve put
+            my benchmarking CLI tool and a speed-test macOS/iOS app up on GitHub
+            <a href="https://github.com/smpanaro/time-series-compression" style="color: cornflowerblue;">here</a>.
+        </p>
+
+        <p>
+            If you can put your data in CSV format, you should be able to drop
+            it in and try out all the algorithms mentioned in this post. If you
+            do, let me know what sort of results you see! I'm curious to see
+            more real-world data points.
+        </p>
+        <hr />
+    </article>
+
+    <footer>
+        Comments or thoughts? Find me on <a href="https://twitter.com/stephenpanaro">twitter</a> or <a
+            href="https://mastodon.social/@smpanaro">mastodon</a>.
+        <br />
+        <br />
+        <a href="/">home</a> &bull; <a href="/blog">blog</a> &bull; <a href="/feed.xml">rss</a>
+    </footer>
+</body>
+
+</html>

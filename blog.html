@@ -4,11 +4,11 @@
 <head>
     <meta name="Content-Type" content="text/html; charset=UTF-8">
     <meta name="author" content="Stephen Panaro">
-    <meta name="keywords" content="Stephen Panaro">
+    <meta name="keywords" content="Stephen Panaro, blog">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="stephenpanaro.com">
-    <title>stephenpanaro.com - home</title>
+    <meta property="og:title" content="blog">
+    <title>stephenpanaro.com - blog</title>
 
     <style>
         body {
@@ -26,27 +26,33 @@
             color: unset;
         }
 
-        article span {
-            opacity: 0.5;
-            font-size: 12px;
+        header h2 {
+            margin-bottom: 0;
+        }
+
+        header div {
+            display: flex;
+            gap: 8px;
         }
     </style>
 </head>
 
 <body>
     <header>
-        <h2>stephen</h2>
+        <h2>stephen &bull; blog</h2>
+        <div>
+            <a href="/">home</a>
+            <a href="/feed.xml">rss</a>
+        </div>
     </header>
 
     <article>
-        <a href="/blog">blog</a>
-        <br \>
-        <a href="/feed.xml">rss</a>
-        <br \>
-        <a href="https://www.github.com/smpanaro">github</a> <span>@smpanaro</span>
-        <br \>
-        <a href="https://www.twitter.com/flat">twitter</a> <span>@flat</span>
+        <h2>posts</h2>
+        <!-- <a href="/blog/time-series-compression">
+            No Frills Time Series Compression That Also Works
+        </a> -->
     </article>
+
 
 </body>
 
