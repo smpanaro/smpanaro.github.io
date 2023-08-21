@@ -187,7 +187,7 @@
                 <br />
                 = 2.19M readings / year
             </code>
-            <code style="white-space: no-wrap;">
+            <code style="white-space: nowrap;">
                 1 reading = 1 date + 1 weight
                 <br />
                 = 1 uint64 + 1 float32
@@ -390,11 +390,11 @@
             negative and positive:
         </p>
 
-        <code style="display: block; margin: 30px 0;">
+        <code style="white-space: pre-line; display: block; margin: 30px 0;">
             0000000000000001 is -1 <i>zig</i>
-            <pre style="margin: 0;">0000000000000010 is  1 <i>zag</i></pre>
+            0000000000000010 is &nbsp;1 <i>zag</i>
             0000000000000011 is -2 <i>zig</i>
-            <pre style="margin: 0;">0000000000000100 is  2 <i>zag</i></pre>
+            0000000000000100 is &nbsp;2 <i>zag</i>
         </code>
 
         <p>
@@ -551,7 +551,8 @@
                         <td></td>
                         <td colspan="4">
                             <div style="display: flex;">
-                                &RightTee; <span style="flex: 1; text-align: center;">higher is better</span> &LeftTee;
+                                &RightTee; <span style="flex: 1; text-align: center;">higher is better</span>
+                                &LeftTee;
                             </div>
                         </td>
                         <td>
@@ -589,7 +590,6 @@
                     Swift does
                     not)</sup></li>
         </ul>
-        </p>
 
         <p>
             We’ll use delta encoding like above–it’d be silly not to. We could
@@ -639,7 +639,8 @@
 
         <img class="block-center" src="/static/blog/time-series-compression/speed-chart.png" style="border-radius: 4px;"
             alt="Chart of speed benchmarks for our 5 algorithms at various levels" />
-        <sub class="block-center image-caption" style="text-align: center;">Speed benchmarks for our 5 algorithms</sub>
+        <sub class="block-center image-caption" style="text-align: center;">Speed benchmarks for our 5
+            algorithms</sub>
 
         <p>
             We’ll use Brotli 4 and zstd 5 since those are in-line with the
@@ -710,7 +711,8 @@
                         <td></td>
                         <td colspan="4">
                             <div style="display: flex;">
-                                &RightTee; <span style="flex: 1; text-align: center;">higher is better</span> &LeftTee;
+                                &RightTee; <span style="flex: 1; text-align: center;">higher is better</span>
+                                &LeftTee;
                             </div>
                         </td>
                         <td>
@@ -793,7 +795,8 @@
 
         <img class="block-center" src="/static/blog/time-series-compression/compression-chart-3.png"
             style="border-radius: 4px;" alt="Chart of MB/year by algorithm including single column CSV results" />
-        <sub class="block-center image-caption" style="text-align: center;">MB/year by algorithm including single column
+        <sub class="block-center image-caption" style="text-align: center;">MB/year by algorithm including single
+            column
             CSV
             results</sub>
 
