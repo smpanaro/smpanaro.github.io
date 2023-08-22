@@ -153,7 +153,7 @@
         <h1>
             No Frills Time Series Compression That Also Works
         </h1>
-        <span class="subhead">CSV + gzip will take you far. &bull; Aug XX, 2023</span>
+        <span class="subhead">CSV + gzip will take you far. &bull; August 22, 2023</span>
 
 
         <p>
@@ -323,7 +323,7 @@
 
         <h3>Negative Numbers</h3>
         <p>
-            Negative numbers show up semi-frequently in scale data because any time
+            Negative numbers show up semi-frequently in scale data because often when
             you pick something up off a scale it will drop below zero.
         </p>
 
@@ -571,7 +571,7 @@
             variety, then backed out the MB/year from the average compression
             ratio. Going from 26 MB/year to under 5 is a great result!
 
-        <h2>&hellip; and the Generalist Ones</h2>
+        <h2>Now for the Generalist Ones</h2>
         <p>
             Similar to the specialist algorithms, we have a few
             choices to make before we can run our tests on the generalists.
@@ -609,11 +609,11 @@
         <ul>
 
             <li>
-                <b>zlib</b>, <b>LZMA</b>, and <b>LZFSE</b> – these come built-in with iOS which makes
+                <i>zlib</i>, <i>LZMA</i>, and <i>LZFSE</i> – these come built-in with iOS which makes
                 my life easier. zlib and LZMA are also fairly common.
             </li>
             <li>
-                <b>Zstandard</b> (aka zstd) and <b>Brotli</b> – from Facebook and Google
+                <i>Zstandard</i> (aka zstd) and <i>Brotli</i> – from Facebook and Google
                 respectively, both companies with an interest in good
                 compression
             </li>
@@ -928,9 +928,9 @@
         </p>
         <ul>
             <li>
-                It’s ~1 line of code to implement them. <sup style="font-size: 12px; opacity: 0.6;">Plus a few lines
-                    to
-                    make a CSV.</sup>
+                It’s <a href="https://developer.apple.com/documentation/foundation/nsdata/3174960-compressed">~1
+                    line of code</a> to implement them. <sup style="font-size: 12px;
+                opacity: 0.6;">Plus a few lines to make a CSV.</sup>
             </li>
             <li>
                 Using Brotli or zstd would increase my app’s download size by 400-700 KB. Not a lot but avoiding
@@ -951,7 +951,7 @@
         <p>
             If you can put your data in CSV format, you should be able to drop
             it in and try out all the algorithms mentioned in this post. If you
-            do, let me know what sort of results you see! I'm curious to see
+            do, let me know what sort of results you get! I'm curious to see
             more real-world data points.
         </p>
         <hr />

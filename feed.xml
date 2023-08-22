@@ -3,7 +3,7 @@
 
     <title type="text">stephenpanaro.com</title>
 
-    <updated>2023-08-21T02:07:34Z</updated>
+    <updated>2023-08-22T01:55:08Z</updated>
     <id>https://www.stephenpanaro.com/feed.xml</id>
     <link rel="alternate" type="text/html"
         hreflang="en" href="https://www.stephenpanaro.com" />
@@ -19,8 +19,8 @@
         <link rel="alternate" type="text/html"
             href="https://www.stephenpanaro.com/blog/time-series-compression" />
         <id>tag:stephenpanaro.com,2023-08-22:/blog/time-series-compression</id>
-        <updated>2023-08-22T13:00:00Z</updated>
-        <published>2023-08-22T13:00:00Z</published>
+        <updated>2023-08-22T12:00:00Z</updated>
+        <published>2023-08-22T12:00:00Z</published>
         <author>
             <name>Stephen Panaro</name>
         </author>
@@ -82,7 +82,7 @@
 
 
             <img class="block-center" src="https://www.stephenpanaro.com/static/blog/time-series-compression/icloud-settings.jpg"
-                style="max-height: 350px; border-radius: 4px;" alt="iCloud storage usage in iOS Settings app" />
+                style="border-radius: 4px;" alt="iCloud storage usage in iOS Settings app" />
             <sub class="block-center image-caption" style="text-align: center;">iCloud storage usage</sub>
 
             <p>
@@ -103,7 +103,7 @@
             </p>
 
             <img class="block-center" src="https://www.stephenpanaro.com/static/blog/time-series-compression/session-graph.jpg"
-                style="border-radius: 10px; max-height: 250px;" alt="Example brewing session time series chart" />
+                style="border-radius: 10px;" alt="Example brewing session time series chart" />
             <sub class="block-center image-caption" style="text-align: center;">Example brewing session time series</sub>
 
             <h2>Picking Ways to Compress</h2>
@@ -197,7 +197,7 @@
 
             <h3>Negative Numbers</h3>
             <p>
-                Negative numbers show up semi-frequently in scale data because any time
+                Negative numbers show up semi-frequently in scale data because often when
                 you pick something up off a scale it will drop below zero.
             </p>
 
@@ -445,7 +445,7 @@
                 variety, then backed out the MB/year from the average compression
                 ratio. Going from 26 MB/year to under 5 is a great result!
 
-            <h2>&hellip; and the Generalist Ones</h2>
+            <h2>Now for the Generalist Ones</h2>
             <p>
                 Similar to the specialist algorithms, we have a few
                 choices to make before we can run our tests on the generalists.
@@ -483,11 +483,11 @@
             <ul>
 
                 <li>
-                    <b>zlib</b>, <b>LZMA</b>, and <b>LZFSE</b> – these come built-in with iOS which makes
+                    <i>zlib</i>, <i>LZMA</i>, and <i>LZFSE</i> – these come built-in with iOS which makes
                     my life easier. zlib and LZMA are also fairly common.
                 </li>
                 <li>
-                    <b>Zstandard</b> (aka zstd) and <b>Brotli</b> – from Facebook and Google
+                    <i>Zstandard</i> (aka zstd) and <i>Brotli</i> – from Facebook and Google
                     respectively, both companies with an interest in good
                     compression
                 </li>
@@ -802,9 +802,9 @@
             </p>
             <ul>
                 <li>
-                    It’s ~1 line of code to implement them. <sup style="font-size: 12px; opacity: 0.6;">Plus a few lines
-                        to
-                        make a CSV.</sup>
+                    It’s <a href="https://developer.apple.com/documentation/foundation/nsdata/3174960-compressed">~1
+                        line of code</a> to implement them. <sup style="font-size: 12px;
+                    opacity: 0.6;">Plus a few lines to make a CSV.</sup>
                 </li>
                 <li>
                     Using Brotli or zstd would increase my app’s download size by 400-700 KB. Not a lot but avoiding
@@ -825,7 +825,7 @@
             <p>
                 If you can put your data in CSV format, you should be able to drop
                 it in and try out all the algorithms mentioned in this post. If you
-                do, let me know what sort of results you see! I'm curious to see
+                do, let me know what sort of results you get! I'm curious to see
                 more real-world data points.
             </p>
 
