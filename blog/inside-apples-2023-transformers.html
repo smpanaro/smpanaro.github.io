@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="author" content="Stephen Panaro">
+    <meta name="keywords"
+        content="Stephen Panaro, blog, apple, neural engine, transformers, machine learning, kv cache, optimization">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link type="application/atom+xml" rel="alternate" href="/feed.xml" title="Atom" />
+    <meta property="og:title" content="Inside Apple's 2023 Transformer Models">
+    <meta property="og:url" content="https://stephenpanaro.com/blog/inside-apples-2023-transformers">
+    <meta property="og:type" content="article">
+    <meta property="og:description" content="Apple's latest OSes include several transformer models that are optimized for the Apple Neural Engine. We'll
+        take a look at how they're implemented and see if there's anything we can apply to our own models…">
+    <!-- <meta property="og:image" content="https://stephenpanaro.com/static/blog/time-series-compression/speed-chart.png"> -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="twitter:domain" content="stephenpanaro.com">
+    <meta property="twitter:url" content="https://stephenpanaro.com/blog/inside-apples-2023-transformers">
+    <meta name="twitter:title" content="Inside Apple's 2023 Transformer Models">
+    <meta name="twitter:description" content="Apple's latest OSes include several transformer models that are optimized for the Apple Neural Engine. We'll
+        take a look at how they're implemented and see if there's anything we can apply to our own models…">
+    <!-- <meta name="twitter:image" content="https://stephenpanaro.com/static/blog/time-series-compression/speed-chart.png"> -->
+
+    <meta name="description" content="Apple's latest OSes include several transformer models that are optimized for the Apple Neural Engine. We'll
+        take a look at how they're implemented and see if there's anything we can apply to our own models…">
+    <title>Inside Apple's 2023 Transformer Models</title>
+
+    <style>
+        body {
+            font-family: -apple-system, Arial, Helvetica, sans-serif;
+            font-size: 16px;
+            line-height: 22px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #191919;
+                color: #f6f6f6;
+            }
+        }
+
+        a {
+            color: unset;
+        }
+
+        header div {
+            display: flex;
+            gap: 8px;
+        }
+
+        article {
+            max-width: 600px;
+        }
+
+        h1 {
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            margin-top: 48px;
+        }
+
+        img {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+
+        code {
+            font-family: monospace;
+            font-size: 14px;
+            word-wrap: break-word;
+        }
+
+        span.subhead {
+            opacity: 0.5;
+            font-style: italic;
+        }
+
+        .block-center {
+            display: block;
+            margin: auto;
+        }
+
+        .image-caption {
+            opacity: 0.6;
+        }
+
+        details,
+        blockquote {
+            opacity: 0.7;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div>
+            <span>stephen &bull;</span>
+            <a href="/">home</a>
+            <a href="/blog">blog</a>
+            <a href="/feed.xml">rss</a>
+        </div>
+    </header>
+
+    <article>
+        <h1 id="alookinsideapplesnewtransformermodels">Inside Apple's 2023 Transformer Models</h1>
+        <span class="subhead">What can we learn from them? &bull; November XX, 2023</span>
+        <p>Apple's latest OSes include several transformer models that are optimized for the Apple Neural Engine. We'll
+            take a look at how they're implemented and see if there's anything we can apply to our own models. To make
+            that easier, I've cobbled together support for viewing them in Netron&mdash;you can try it yourself <a
+                href="https://github.com/smpanaro/netron/tree/espresso-mil">here</a>.</p>
+        <hr />
+        <p>While everyone is talking about AI or GPT, Apple made a point to use the words "machine learning" and
+            "transformer" when announcing new features for this year's operating systems (iOS 17 and macOS Sonoma).</p>
+        <p>Apple has been vocal about their Machine Learning accelerator, the Neural Engine (ANE), so it's no surprise
+            that these models are designed to leverage its capabilities.</p>
+        <p>In contrast to their normal secrecy, Apple has been fairly public about how to run the transformer model
+            architecture on the ANE. In the past year and a half they:</p>
+        <ul>
+            <li>Wrote a <a href="https://machinelearning.apple.com/research/neural-engine-transformers">research
+                    article</a> about how to optimize transformers for the ANE.<ul>
+                    <li>Released code to demonstrate it in the <a
+                            href="https://github.com/apple/ml-ane-transformers">ml-ane-transformers repo</a>.</li>
+                </ul>
+            </li>
+            <li>Published a Stable Diffusion (text to image) implementation optimized for the ANE in the <a
+                    href="https://github.com/apple/ml-stable-diffusion">ml-stable-diffusion repo</a>.<ul>
+                    <li>They have kept this up to date too!</li>
+                </ul>
+            </li>
+        </ul>
+        <p>The models embedded in the new OS are not quite as easily inspected as a research article or GitHub project.
+            However they are a year newer. Let's see what we can learn from them!</p>
+        <blockquote>
+            <p>This is most interesting if you're familiar with transformers and how they work. However if you are just
+                generally curious I've tried to add explainers throughout to fill in some background.
+            <details>
+                <summary>They'll look like this</summary>Feel free to skip them.
+            </details>
+            </p>
+        </blockquote>
+        <h2 id="themodels">The Models</h2>
+        <p>We'll look at two models today. One powers the keyboard autocomplete, and the other does speech to text. Both
+            use the transformer architecture to a degree.</p>
+        <p>
+        <details>
+            <summary>What is a transformer?</summary>
+            Transformer is an ML model architecture. This is a specific sequence of mathematical operations that the
+            model performs to generate a set of numeric outputs from a given set of inputs. Transformers are
+            particularly good at generating text since they predict new words based on all the prior words. They can
+            also be used for non-text problems too.
+        </details>
+        </p>
+        <p><img src="/static/blog/inside-apples-2023-transformers/autocomplete-overview.png"
+                alt="annotated image of Netron showing the first layer of the autocomplete transformer model">
+            <sub class="block-center image-caption" style="text-align: center;">The input and first layer of the
+                autocomplete model, annotated.</sub>
+        </p>
+        <p>We won't go too deep into the models individually, rather just highlight the interesting bits. However if you
+            want a nice overview of the autocomplete model, <a
+                href="https://jackcook.com/2023/09/08/predictive-text.html">this blog post</a> has a good one.</p>
+        <h2 id="thevocabsize">The Vocab Size</h2>
+        <p><strong>Model:</strong> Keyboard Autocomplete</p>
+        <p>The outputs of a transformer are a bunch of probabilities for which token out of the vocab should come next.
+            To compute these, you need to load a large mapping from token ID to embedding vector into memory.</p>
+        <p>
+        <details>
+            <summary>Vocab? Probabilities?</summary>
+            Transformers operate on numbers, so we need a way to translate between text and numbers. We do this by
+            generating a set of pieces of words (and some whole words). Each word piece (aka token) is assigned a
+            number, the token ID, that represents it. The group of all word pieces is the vocabulary. The outputs of a
+            text generation model is a probability for every token in the vocabulary that is the likelihood it is the
+            next token in the sequence.
+        </details>
+        </p>
+        <p>One dimension of this mapping matrix is equal to the number of tokens in the vocabulary. For many models this
+            is quite large. gpt-2 (2019) has 50,257 tokens in its vocabulary. LLaMa and Llama2 (2023) have 32,000.</p>
+        <p>Apple's autocomplete model only has 15,000. Not only is this number much smaller, it is just under a
+            threshold of matrix size that the Neural Engine can load. This means that the final computation to determine
+            probabilities can happen on the Neural Engine instead of paying the cost to transfer to CPU.</p>
+        <p><img src="/static/blog/inside-apples-2023-transformers/output-logits.png"
+                alt="annotated Netron screenshot showing the autocomplete models outputs and indicating that the last inner_product can run on the ANE">
+            <sub class="block-center image-caption" style="text-align: center;">The inner_product here is the language
+                modeling (lm) head.</sub>
+        </p>
+        <p><strong>Lesson:</strong> If possible, keep your vocab under 16384. <sup>[1]<sup></p>
+        <p><sub>[1] If you don't have control of this, you can duplicate the embedding matrix and do most of the
+                computation on ANE. <a
+                    href="https://github.com/RobertRiachi/ANE-Optimized-Whisper-OpenAI/blob/d42252155b8e29b2e2c32e7b911ec647198547fb/model.py#L181-L183">Here's
+                    an example</a>.</sub></p>
+        <h2 id="thekvcache">The KV Cache</h2>
+        <p><strong>Model:</strong> Speech to Text</p>
+        <p>When using transformers for text generation, a common way to speed them up is to use KV caching. This saves
+            you a decent amount of computation.</p>
+        <p>
+        <details>
+            <summary>What is KV Caching?</summary>
+            A central part of the transformer architecture is multiplying 3 matrices together. They are the Query, Key
+            and Value matrices. An interesting aspect about repeatedly generating text with transformers is that the
+            contents of these matrices is mostly the same from prediction to prediction. This means we can avoid a bunch
+            of computation by reusing the K and V matrices from the last token we predicted. These are the KV cache.
+        </details>
+        </p>
+        <p><img src="/static/blog/inside-apples-2023-transformers/traditional-kv-cache.png"
+                alt="visualization of the Q and K multiplication without a cache and with a traditional single-token-Q cache">
+            <sub class="block-center image-caption" style="text-align: center;">With traditional KV caching, the input
+                is 1 token and the cache has no padding.</sub>
+        </p>
+        <p>In most implementations, the shape of the KV cache grows by one for each new token. This won't fly on the ANE
+            which requires the model's inputs and outputs have a fixed size.</p>
+        <p>You can use KV caching for any transformer model, not just text generation, and it seems that Apple has found
+            a way to make it work for their speech-to-text model.</p>
+        <p>They have side-stepped the ANE constraints by using a fixed size input for their new tokens and sliding their
+            KV cache by that same amount for each inference.</p>
+        <p><img src="/static/blog/inside-apples-2023-transformers/apple-kv-cache.png"
+                alt="visualization of two back-to-back inferences using Apple's sliding KV cache">
+            <sub class="block-center image-caption" style="text-align: center;">Apple's KV cache slides so that the
+                inputs are always the same size.</sub>
+        </p>
+        <p>This gives a meaningful speed up (2-5x in my experience). However there are two caveats.</p>
+        <p>First, you have to use <a
+                href="https://developer.apple.com/documentation/coreml/mlmultiarray/3882834-initwithpixelbuffer?language=objc">IOSurface-backed</a>
+            inputs and outputs otherwise all of the speed gained is lost again by time spent copying them in and out of
+            CoreML. Second, if you are on Sonoma/iOS17, you can't have any CPU segments at the start of your model or it
+            will be really slow&mdash;this seems like a regression so I have filed feedback.</p>
+        <p><strong>Lesson:</strong> Use KV caching. If you're on Sonoma/iOS17, do your CPU work in a separate model.</p>
+        <h3 id="bonusthekeycache">Bonus: The Key Cache</h3>
+        <p>The KV cache is actually a concatenation of caches for two different matrices: a Key (K) and Value (V). Often
+            these are combined into one cache for simplicity, but Apple keeps them separate.</p>
+        <p>Why keep them separate? First, you can store the Key cache transposed instead of transposing it before using
+            it. Transposing large tensors is extra work that you can avoid (this is in line with Apple's principle of
+            "minimize memory copies"). Secondly, the KV cache is a large tensor and by separating the two, you keep the
+            intermediate tensors smaller.</p>
+        <p><img src="/static/blog/inside-apples-2023-transformers/transposed-key-cache.png"
+                alt="screenshot of netron showing separate K and V caches, and that the K cache is transposed">
+            <sub class="block-center image-caption" style="text-align: center;">Separate caches for K and V and they're
+                transposed.</sub>
+        </p>
+        <p>I don't see much impact from this, but it makes sense to me since you are avoiding work.</p>
+        <p><strong>Lesson:</strong> Maybe transpose your K cache and keep it separate from the V cache.</p>
+        <h2 id="customlayernorm">Custom Layer Norm</h2>
+        <p><strong>Model:</strong> Both</p>
+        <p>
+        <details>
+            <summary>What is a layer norm?</summary>
+            Layer Norm is one of the operations that a transformer model uses. It scales the values of a tensor so they
+            have certain statistical properties. Layer norm does this along a particular axis of the tensor.
+        </details>
+        </p>
+        <p>One of the optimizations Apple recommends for the Neural Engine is to use a layer norm that normalizes along
+            an uncommonly used axis. PyTorch's layer norm doesn't support this, so Apple provides a multi-step manual
+            implementation.</p>
+        <p>
+        <details>
+            <summary>Why does it matter what PyTorch supports?</summary>
+            In order to run models on Apple's devices, they need to be converted to CoreML. The easiest way to convert
+            them is by starting from a PyTorch (a Python ML framework) model. So if you want something, PyTorch needs to
+            support it. There are other ways but they are much more complex.
+        </details>
+        </p>
+        <p>I was curious to see what Apple used for the layer norm for two reasons. First, on Ventura/iOS 16 I found
+            that the layer_norm (specifically the reduce_mean) caused my models to lose precision in float16. Second,
+            CoreML has native support for layer norm along the uncommon axis and I was curious if it would be used.</p>
+        <p>Interestingly enough, it seems like Apple uses the same implementation that they open sourced in
+            ml-ane-transformers. You can even see that most of the variable names line up!</p>
+        <p><img src="/static/blog/inside-apples-2023-transformers/layer-norm-comparison.png"
+                alt="side-by-side of ml-ane-transformers layer_norm.py and netron of the layer norm with arrows pointing to the commonalities">
+            <sub class="block-center image-caption" style="text-align: center;">Almost exactly the same! I am slightly
+                confused by the alpha in the zero_mean though.</sub>
+        </p>
+        <p>I was hoping for something creative here, but on the plus side it seems that layer norm is more resilient in
+            float16 on the new OSes.</p>
+        <p><strong>Lesson:</strong> Just use Apple's custom layer norm.</p>
+        <h2 id="quantization">Quantization</h2>
+        <p><strong>Model:</strong> Both</p>
+        <p>Both models use quantization to reduce the size of their weight parameters. Transformer models are often
+            bottlenecked by the amount of weight parameters they have to load and then unload. The new OSes have support
+            for runtime de-quantization which helps reduce this bottleneck.</p>
+        <p>This can reduce the accuracy of your model, so keep an eye on that.</p>
+        <p><strong>Lesson:</strong> Try quantizing your model. Two good sources: <a
+                href="https://apple.github.io/coremltools/docs-guides/source/optimization-overview.html">coremltools
+                docs</a> and this Huggingface/ml-stable-diffusion <a
+                href="https://huggingface.co/blog/stable-diffusion-xl-coreml#what-is-mixed-bit-palettization">article</a>.
+        </p>
+        <h2 id="otherobservations">Other Observations</h2>
+        <p>There are a couple other things I noticed but I don't know how to take advantage of them. Despite that, they
+            are still interesting in and of themselves&mdash;if you see a way to use them, please let me know!</p>
+        <p><strong>Single Input</strong> The text autocomplete model takes 3 inputs: 128 token IDs, 128 position values
+            and 128 segment values. It passes them to the model as one concatenated input and then immediately splits
+            them. I'm not sure the benefit of this, it's possible there isn't one.</p>
+        <p><img src="/static/blog/inside-apples-2023-transformers/input-embeddings.png"
+                alt="the input embeddings of the autocomplete model in netron" />
+            <sub class="block-center image-caption" style="text-align: center;">In the autocomplete model, the 3
+                embedding fields are passed as one input.</sub>
+        </p>
+        <p><strong>Shared Weights</strong> The text autocomplete model actually has two versions, one for CPU and one
+            for ANE. They are slightly different (different inputs and outputs), but they both share the same weights. I
+            don't believe this is currently possible using Apple's provided tooling, but it does open up some
+            interesting possibilities. To achieve something similar today you have to ship two copies of the same
+            weights.</p>
+        <pre><code>$ head -n2 unilm_joint_ane.espresso.net
+&lcub;
+  "storage": "unilm_joint.espresso.weights",
+$ head -n2 unilm_joint_cpu.espresso.net
+&lcub;
+  "storage": "unilm_joint.espresso.weights",
+</code></pre>
+        <p><strong>MultiHead Softmax</strong> Apple's implementation of the transformer in ml-ane-transformers splits a
+            large matrix multiplication up into several smaller ones, then performs a softmax on each result (<a
+                href="https://github.com/apple/ml-ane-transformers/blob/da64000fa56cc85b0859bc17cb16a3d753b8304a/ane_transformers/reference/multihead_attention.py#L80-L108">link</a>).
+            In contrast, the autocomplete model concatenates the results of the split matrix multiplications, performs
+            one softmax, then re-splits that. I didn't see any performance difference from doing this, but I was only
+            looking at speed.</p>
+        <p><strong>Extra Outputs</strong> The CPU version of the model outputs the next token logits, but also the
+            pre-logit embeddings. This isn't super novel, but worth mentioning since the cost of getting
+            already-existing data out of the model seems to be fairly low if you use IOSurface-backed buffers as
+            mentioned above. This might be counterintuitive since some of these outputs can be rather large.</p>
+        <h2 id="seeforyourself">See for Yourself</h2>
+        <p>Those are the eight things that stood out to me from looking at Apple's new models. Four of them are useful,
+            four of them are just interesting.</p>
+        <p>If you'd like to look for yourself, you can find the models here on macOS Sonoma:</p>
+        <ul>
+            <li>Autocomplete:
+                <code
+                    class="long-code">/System/Library/LinguisticData/RequiredAssets_en.bundle/AssetData/en.lm/unilm.bundle</code>
+            </li>
+            <li>Speech to Text:
+                <code
+                    class="long-code">find /System/Library/AssetsV2/com_apple_MobileAsset_Trial_Siri_SiriUnderstandingAsrAssistant -name "AM-Conformer"</code>
+            </li>
+        </ul>
+        <p>I have a hacky <a href="https://github.com/smpanaro/netron/tree/espresso-mil">fork</a> of Netron here that
+            can open them (it will only open the first 3000 operations of the Speech to Text model since it is huge).
+        </p>
+        <p>If you find anything interesting or if I misinterpreted something I would love to know. Drop me a line!</p>
+    </article>
+
+    <hr />
+
+    <footer>
+        Comments or thoughts? Find me on <a href="https://twitter.com/stephenpanaro">twitter</a> or <a
+            href="https://mastodon.social/@smpanaro">mastodon</a>.
+        <br />
+        <br />
+        <a href="/">home</a> &bull; <a href="/blog">blog</a> &bull; <a href="/feed.xml">rss</a>
+    </footer>
+</body>
+
+</html>
