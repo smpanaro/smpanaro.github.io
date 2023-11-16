@@ -28,6 +28,11 @@
             color: unset;
         }
 
+        a.post {
+            display: block;
+            margin-top: 8px;
+        }
+
         header h2 {
             margin-bottom: 0;
         }
@@ -35,6 +40,16 @@
         header div {
             display: flex;
             gap: 8px;
+        }
+
+        p {
+            max-width: 400px;
+            margin: 4px 0;
+            opacity: 0.6;
+            font-style: italic;
+            font-size: 12px;
+            font-weight: 200;
+            padding: 0;
         }
     </style>
 </head>
@@ -50,9 +65,14 @@
 
     <article>
         <h2>posts</h2>
-        <a href="/blog/time-series-compression">
+        <a class="post" href="/blog/inside-apples-2023-transformers">
+            Inside Apple's 2023 Transformer Models
+        </a>
+        <p>What can we learn from them?</p>
+        <a class="post" href="/blog/time-series-compression">
             No Frills Time Series Compression That Also Works
         </a>
+        <p>So you have some time series data and you want to make it smaller?</p>
     </article>
 
 
