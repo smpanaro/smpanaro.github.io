@@ -352,7 +352,7 @@
 
             <p>
                 Thanks for reading! To stay in the loop as I explore more, you can give me a follow on <a
-                    href="https://twitter.com/stephenpanaro">Twitter</a>. If you'd
+                    href="https://twitter.com/flat">Twitter</a>. If you'd
                 like to give it a go yourself, I've got a drop-in replacement for torch's Linear layer, as well as some
                 instructions: <a href="https://github.com/smpanaro/apple-silicon-4bit-quant">here</a>. Please get in touch, ask questions, and let me know what you learn!
             </p>
@@ -1545,7 +1545,7 @@ $ head -n2 unilm_joint_cpu.espresso.net
             </p>
 
             <p>
-            Comments or thoughts? Find me on <a href="https://twitter.com/stephenpanaro">twitter</a> or <a
+            Comments or thoughts? Find me on <a href="https://twitter.com/flat">twitter</a> or <a
             href="https://mastodon.social/@smpanaro">mastodon</a>.
             </p>
             ]]>
