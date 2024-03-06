@@ -3,17 +3,482 @@
 
     <title type="text">stephenpanaro.com</title>
 
-    <updated>2023-11-16T0:05:00Z</updated>
+    <updated>2024-03-06T0:05:00Z</updated>
     <id>https://www.stephenpanaro.com/feed.xml</id>
     <link rel="alternate" type="text/html"
         hreflang="en" href="https://www.stephenpanaro.com" />
     <link rel="self" type="application/atom+xml"
         href="https://www.stephenpanaro.com/feed.xml" />
-    <rights>Stephen Panaro © 2023-Now</rights>
+    <rights>Stephen Panaro © 2024-Now</rights>
     <generator uri="https://www.stephenpanaro.com" version="1.0">
         Me
     </generator>
 
+    <entry>
+        <title type="text">LLMs for your iPhone: Whole-Tensor 4 Bit Quantization</title>
+        <link rel="alternate" type="text/html"
+            href="https://www.stephenpanaro.com/blog/llm-quantization-for-iphone" />
+        <id>tag:stephenpanaro.com,2024-03-06:/blog/llm-quantization-for-iphone</id>
+        <updated>2024-03-06T0:05:00Z</updated>
+        <published>2024-03-06T0:05:00Z</published>
+        <author>
+            <name>Stephen Panaro</name>
+        </author>
+        <content type="html" xml:lang="en">
+            <![CDATA[
+            <span class="subhead">Shrinking models for Apple Silicon</span>
+
+            <div class="inline-aside" style="margin-top: 12px">&gt;New to this, but still curious? Don't worry,
+                I wrote the <a href="#primer">Primer</a> below
+                just for you.</div>
+
+            <p>
+                Quantization is often touted as a way to make large language models (LLMs) small enough to run on mobile
+                phones. Despite this, very few of the latest methods are able to use the full power of Apple Silicon on
+                iPhone and Mac. This post introduces a new method of quantization that can.
+            </p>
+
+            <p>
+                This method is compatible with all three Apple Silicon co-processors (CPU, GPU, Neural Engine) which
+                allows it to take full advantage of the speed/battery trade-offs offered by the hardware.
+            </p>
+
+            <p>
+                When compared to standard 4 bit Apple Silicon-compatible methods, it produces consistently more accurate
+                results. Additionally it approaches the accuracy of GPTQ, a widely-used method that is not compatible.
+            </p>
+
+            <p>
+                Finally, this method is comparatively accessible. Access to Colab free tier and an Apple Silicon MacBook
+                is sufficient to quantize the full family of GPT-2 models up to 1.5B parameters.
+            </p>
+
+            <img class="block-center" style="max-width: calc(min(100%, 380px)); border-radius: 4px 4px 0 0"
+                src="/static/blog/llm-quantization-for-iphone/whole-tensor-comparison.png" />
+            <img class="block-center" style="max-width: calc(min(100%, 380px)); border-radius: 0 0 4px 4px"
+                src="/static/blog/llm-quantization-for-iphone/gptq-comparison.png" />
+            <sub class="block-center image-caption" style="text-align: center;">Lower is better in these plots. You want
+                a
+                smaller model with better performance (lower perplexity is better). In the first plot, naive clustering
+                occasionally performs well but is erratic. In the second, GPTQ is better but cannot run fully on Apple
+                Silicon.</sub>
+
+            <h2>Acknowledgements</h2>
+            <p>
+                This method extends <a href="https://arxiv.org/abs/2306.07629">SqueezeLLM</a>, and remixes ideas from both
+                <a href="https://arxiv.org/abs/2211.10438">SmoothQuant</a> and <a
+                    href="https://arxiv.org/abs/2306.00978">AWQ</a>. It was developed
+                concurrently with <a href="https://arxiv.org/abs/2402.11295">OneBit</a>, and shares some similar ideas.
+                Thank you for sharing your research and code!
+            </p>
+
+            <h2 id="primer">LLM and Quantization Primer</h2>
+            <div class="inline-aside">If you know this, you can skip it. If you don't, hopefully it helps you get
+                oriented. Drop me a line if anything is confusing!</div>
+
+            <p>
+                When you ask an LLM a question, that text gets transformed into a matrix of numbers. This matrix is then
+                transformed repeatedly with a bunch of math until a final transformation that converts it from numbers to
+                the first few characters of the LLM's response.
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/llm-simplified.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">This is accurate for our purposes.</sub>
+
+            <p>
+                Within these repeated transformations there are many times where the input matrix is multiplied with
+                different hardcoded matrices. These hardcoded matrices can be quite large and end up accounting for most of
+                the space that an LLM takes up. For instance LLaMa 7B, Facebook's open-source LLM, is 13.5GB and 12.9GB of
+                that is the numbers that make up these large matrices.
+            </p>
+
+            <p>
+                Typically the matrix's values are stored as 16 bit <sup class="sup-aside">2 byte</sup> or 32 bit <sup
+                    class="sup-aside">4 byte</sup>
+                floating point numbers. For LLaMa a typical matrix is 4096x4096 which means it takes 33MB on its own.
+                Shrinking those 16 bit elements to 4 bits brings the size of that matrix to 8.3MB. Doing the same for every
+                matrix brings the whole model from 13.5GB to just under 4GB.
+            </p>
+
+            <p>
+                Instead of measuring this compression in bytes-per-matrix, it is measured in bits-per-element. (1 byte = 8
+                bits). This makes it easier to compare across matrices of different sizes and also gives us some flexibility
+                to store a few extra values alongside our matrix. This is actually fairly common. Including them in the
+                bits-per-element calculation makes for fair comparisons.
+            </p>
+
+            <p>
+                So, in summary, LLMs do a bunch of math with matrices in order to generate replies. These matrices are big
+                and quantization's goal is to make them smaller without losing the LLM's ability to reply. This shrinks the
+                model and lets us run it on less powerful devices, like your phone.
+            </p>
+
+            <h2>Challenges with Apple Silicon</h2>
+            <p>
+                If you take the weight from a linear layer (one of the matrices we talked about above) out of an LLM and
+                look at the distribution of its elements, you will generally see a bell curve.
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/weight-distribution.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">It's not a perfect bell curve, but it's
+                close enough to be useful.</sub>
+
+            <p>
+                Nearly all recent quantization schemes are uniform which means they take this bell curve and pick two values
+                for it. They pick a starting point and also a step size which they then use to place equally-spaced points
+                along the x-axis. To actually quantize the matrix they simply snap all matrix elements to the nearest point.
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/quantize-snap.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">The x points are equally
+                spaced.</sub>
+
+            <p>
+                This is a non-optimal use of space in our quantized linear layer. The points on the edges of the bell curve
+                barely capture any matrix elements, but they consume the same amount of space in the LLM as points in the
+                middle which represent many. They are simply not an effective use of bits. (This is fast on GPUs though
+                which is why everyone uses them.)
+            <p>
+                A common solution for this is to break up the matrix into chunks of either rows, columns, or groups. Having
+                fewer elements in a chunk tends to make quantization more accurate by narrowing the bell curve (more or
+                less) and it only costs a few extra fractions of a bit on average. This sufficiently minimizes the
+                awkwardness of fitting equally-spaced points to bell curve-distributed matrix elements.
+            </p>
+
+            <p>
+                Unfortunately Apple Silicon does not support this chunking concept for low (&lt;8) bit quantization.
+                However it makes up for it by allowing models that use a non-uniform quantization scheme. On our bell curve
+                from before, this means we can place our points anywhere we want. So we'll place them optimally.
+            </p>
+
+            <p>
+                What is optimal? For each matrix element we calculate how far it is from the nearest point. This is the
+                element's quantization error. We place our points along the bell curve so that the sum of all elements'
+                errors is as low as possible. (<a href="https://en.wikipedia.org/wiki/K-means_clustering">k-means
+                    clustering</a> is a good way to do this.)
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/uniform-vs-non-uniform.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">Notice how uniform puts points at the edges,
+                but non-uniform is free to ignore the small number of matrix elements there.</sub>
+
+            <p>
+                Placing the points optimally like this is all we need to do when we have a lot of points to place. Most LLMs
+                will perform very well if we place 6 bits or 8 bits worth of points (64 and 256 respectively). However when
+                we drop to 4 bits worth, which is only 16 points, this simple optimal placement is not enough.
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/bits-to-point-density.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">If we were to shade these to show the error
+                they would get darker going from top to bottom. The LLM performance also typically goes from nearly perfect,
+                to good, to bad going from top to bottom.</sub>
+
+            <h2>Method Overview</h2>
+            <p>
+                Our goal is to improve LLM performance when using 4-bits as much as possible. We achieve this by making 3
+                complementary modifications to the quantization process and the LLM itself.
+            </p>
+
+            <h3>Modification 1: Weighting by Importance</h3>
+
+            <p>
+                The first modification comes directly from another paper, <a
+                    href="https://arxiv.org/abs/2306.07629">SqueezeLLM</a>. The paper is fairly approachable, but
+                we'll summarize the parts we're using.
+            </p>
+
+            <p>
+                It turns out that every element in these matrices is not equally important. In fact the top few percent are
+                significantly more important. When we're placing our points optimally we should not treat every element
+                equally, but let the more important elements have more sway. But how do we know what's important? We take a
+                small number of input texts (100 is enough), send them through our LLM, and observe the impact each matrix
+                element had on the LLM's response. The higher the total impact, the more important.
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/non-uniform-sensitivity.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">The triangles represent more important
+                elements. The Naive method is optimal for a standard bell curve, but the importance aware method shifts
+                closer to the triangles.
+            </sub>
+
+            <h3>Modification 2: Scaling for Easier Clustering</h3>
+
+            <p>
+                So far we've been looking at our matrix as a single bell curve. A different way of thinking about it is to
+                look at every column of the matrix as an independent entity that just happens to be joined together in this
+                matrix. Similar to the matrix as a whole, each column's elements are roughly bell curve-shaped. Most of the
+                bell curves have similar centers but they all have different standard deviations (how wide or narrow they
+                are).
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/unscaled-weight-columns.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">The columns of our matrix are all centered
+                around zero, but the standard deviation varies&mdash;some are very wide while others are fairly
+                narrow.
+            </sub>
+
+            <p>
+                If we divide the elements of each column by the column's standard deviation we make the bell curves roughly
+                the same shape. This makes it easier to place our points since it prevents one column from having undue
+                influence over the rest. (You can also think of it as squishing more elements towards the middle of the
+                curve where we typically place more points.)
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/scaled-weight-columns.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">The same columns from above after dividing
+                every element by each column's standard deviation. This reshapes the bell curves.</sub>
+
+            <p>
+                It's important that we don't change the output of our LLM, and scaling each column independently changes it.
+                So we need to take the per-column values that we divided by and correct for them somewhere else in our
+                model. All of the matrices that we're quantizing are used in matrix multiplications. Since we divide each
+                column, and columns determine the output of the matrix multiplication, we can add a step in our LLM after
+                the multiplication to re-multiply the removed values back in.
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/scale-factor-restore.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">We divide before quantizing which makes
+                quantization easier. We have to restore the scale factors at inference time, when the model is generating a
+                response.</sub>
+
+            <p>
+                This does mean we have to keep a few extra values as 16 bit (the ones we multiply back in). For a 768x768
+                matrix, we need 768 extra values in 16 bits. This puts us at 4.02 bits on average which is a reasonable
+                trade-off. The average number of bits decreases as the model and matrices get larger which makes this even
+                less of a concern. (LLaMa is 4.003 or less depending on the version.)
+            </p>
+
+            <h3>Modification 3: Shifting the Other Matrix</h3>
+
+            <p>
+                So far we've been looking closely at the matrix itself. Let's now look at how it is used. As mentioned
+                above, these matrices are used for matrix multiplication. Specifically the model is performing matrix X
+                times matrix W, <code>X*W</code>, and we are quantizing W. We've talked about how the elements in W are
+                nicely distributed with an average close to zero and bell-shaped. This is not true for X. X depends on the
+                text
+                that the model received as input and can vary significantly in how its elements are distributed.
+            </p>
+
+            <p>
+                Why does this matter? Imagine a simple product of two numbers: <code>x*w</code>. Let's say that in this
+                case our 1 element matrix, w, has the value of 2.3 and we quantize it to 2. When we do <code>x*2</code> we
+                get a quantization error of <code>x*0.3</code>. The closer that x is to zero, the less error. The farther
+                it is from zero the more we get.
+            </p>
+
+            <p>
+                This extrapolates to matrix multiplication. When we look at a column of matrix X, if most of its values are
+                far from zero then the impact of quantization error for that column will be larger.
+            </p>
+
+            <p>
+                Similar to our first modification, we can inspect a small number of texts as they flow through the LLM. If
+                we do this we'll see that there is consistency in which columns of X, the input matrix, have larger or
+                smaller values in general.
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/input-column-highlight.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">We're focusing on the columns of the left
+                matrix. This matrix is derived from the input to the LLM.</sub>
+
+            <img src="/static/blog/llm-quantization-for-iphone/unshifted-activation-columns.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">The distribution of average values for
+                select columns. Notice that they are not centered at zero unlike the matrix we're quantizing.</sub>
+
+            <p>
+                To minimize the impact of large values in X we can apply a per-input column shift. This will move most of
+                the values in X closer to zero on average, thereby reducing the impact of our quantization error. We shift
+                by subtracting the average of the values we saw for that column.
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/shifted-activation-columns.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">The same columns from above after
+                subtracting the average value from each column. They are now centered around zero.</sub>
+
+            <p>
+                Similar to our second modification, we need to reverse this change in the model in order to not change its
+                outputs. This one is a little trickier, but again easier to think about without matrices involved. If we
+                take our <code>x*w</code> from earlier we can make a new shifted input y (so, <code>y=x-shift</code>). Now
+                the model will do <code>y*w</code> which is actually <code>(x-shift)*w</code>. If multiply that out we get
+                <code>x*w - shift*w</code>. Since shift and w are both constants we just need to pre-compute that value and
+                subtract it after the matrix multiplication in the model. This undoes the impact of shifting X but reduces
+                the error when w is quantized. (Extrapolating this to matrices is a little harder, but still doable.)
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/shift-factor-restore.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">In this case we don't subtract the shift
+                values themselves, but the result of multiplying all the shifts by the matrix we're quantizing.</sub>
+
+            <p>
+                Depending on the model this adds between zero and two additional vectors of 768 elements in 16 bits. At a
+                worst case this brings us up to 4.06 bits total.
+            </p>
+
+            <h1>Results</h1>
+
+            <p>
+                Used individually, these modifications have varying efficacy. Generally the first modification, from
+                SqueezeLLM, works well on its own. When we add in the other two modifications we see consistent improvement.
+                This leaves us with a quantization scheme that is both more accurate and less erratic than the baseline
+                4-bit method we wanted to improve upon.
+            </p>
+
+            <img src="/static/blog/llm-quantization-for-iphone/additive-modifications.png" class="block-center"
+                style="max-width: calc(min(100%, 380px))" />
+            <sub class="block-center image-caption" style="text-align: center;">SqueezeLLM (Weighting) is surprisingly
+                effective on its own, even at the whole-tensor level. Adding our other modifications consistently improves
+                upon it. The improvement for gpt2-large is negligible&mdash;something interesting to follow up on.</sub>
+
+            <h1>Conclusion</h1>
+            <p class="inline-aside">
+                <b>tl;dr</b> We used an amalgamation of existing and, I think, new ideas to quantize LLM linear
+                layers to ~4 bits on average, dramatically shrinking model size. Since we do this at the tensor level
+                without grouping, this method is fully compatible with Apple Silicon on iPhone or Mac which opens the door
+                for larger models on your devices.
+            </p>
+
+            <p>
+                Thanks for reading! To stay in the loop as I explore more, you can give me a follow on <a
+                    href="https://twitter.com/stephenpanaro">Twitter</a>. If you'd
+                like to give it a go yourself, I've got a drop-in replacement for torch's Linear layer, as well as some
+                instructions: <a href="https://github.com/smpanaro/apple-silicon-4bit-quant">here</a>. Please get in touch, ask questions, and let me know what you learn!
+            </p>
+
+            <hr />
+
+            <h3>Appendix: Future Ideas</h3>
+            <p>
+                Part of my motivation for writing this is to find folks who are smarter than me, who can maybe check my work, and
+                maybe even take it further. If that's you, do please reach out! There's a couple directions that I think
+                still have more to give / would be interesting to explore:
+            </p>
+
+            <ul>
+                <li>I couldn't find a way to scale the input channels (weight matrix rows) that was helpful. Seems like
+                    there might be something there, either as a way to make clustering easier, or as a way to minimize error
+                    from the inputs.</li>
+                <li>Depending on the model, sometimes computing a weighted standard deviation based on the SqueezeLLM
+                    sensitivities performs slightly better. This makes me think that standard deviation is close but not the
+                    optimal solution.</li>
+                <li>These models seem very reactive to how the SqueezeLLM sensitivities are generated. I suspect any
+                    improvements there would help.</li>
+                <li>Explore integrating this with Mixed Bit Precision methods.</li>
+            </ul>
+
+            <h3>Appendix: Modification Comparison</h3>
+            <p>
+                To further support that these modifications are complementary, wikitext perplexity was measured in all
+                possible combinations. As mentioned above, gpt2-large is an outlier but the differences are minor. The
+                SqueezeLLM fisher information (sensitivities) were computed using C4 in all cases.
+            </p>
+
+            <div style="overflow: auto;">
+                <table class="results-table">
+                    <tr>
+                        <th>Model</th>
+                        <th>Weighting</th>
+                        <th>Scaling</th>
+                        <th>Shifting</th>
+                        <th>Weight+Scale</th>
+                        <th>Weight+Shift</th>
+                        <th>Scale+Shift</th>
+                        <th>Weight+Scale+Shift</th>
+                    </tr>
+                    <tr>
+                        <td>gpt2</td>
+                        <td>30.8947</td>
+                        <td>43.0891</td>
+                        <td>44.9285</td>
+                        <td>28.8972</td>
+                        <td>29.1401</td>
+                        <td>43.5065</td>
+                        <td>28.1946</td>
+                    </tr>
+                    <tr>
+                        <td>gpt2-medium</td>
+                        <td>21.4389</td>
+                        <td>30.9959</td>
+                        <td>23.8464</td>
+                        <td>20.4853</td>
+                        <td>19.8515</td>
+                        <td>23.6801</td>
+                        <td>19.904</td>
+                    </tr>
+                    <tr>
+                        <td>gpt2-large</td>
+                        <td>17.2172</td>
+                        <td>22.5075</td>
+                        <td>18.1454</td>
+                        <td>17.1246</td>
+                        <td>17.1282</td>
+                        <td>25.2589</td>
+                        <td>17.1507</td>
+                    </tr>
+                    <tr>
+                        <td>gpt2-xl</td>
+                        <td>16.1751</td>
+                        <td>15.89</td>
+                        <td>15.7223</td>
+                        <td>15.148</td>
+                        <td>16.0874</td>
+                        <td>17.0936</td>
+                        <td>15.1148</td>
+                    </tr>
+                </table>
+                <table class="results-table">
+                    <tr>
+                        <th>Model</th>
+                        <th>float16</th>
+                        <th>naive 4-bit</th>
+                        <th>Weight+Scale+Shift</th>
+                        <th>GPTQ</th>
+                    </tr>
+                    <tr>
+                        <td>gpt2</td>
+                        <td>25.1876</td>
+                        <td>62.1889</td>
+                        <td>28.1946</td>
+                        <td>26.5</td>
+                    </tr>
+                    <tr>
+                        <td>gpt2-medium</td>
+                        <td>18.4739</td>
+                        <td>23.7826</td>
+                        <td>19.904</td>
+                        <td>19.1719</td>
+                    </tr>
+                    <tr>
+                        <td>gpt2-large</td>
+                        <td>16.4541</td>
+                        <td>27.3636</td>
+                        <td>17.1507</td>
+                        <td>16.6875</td>
+                    </tr>
+                    <tr>
+                        <td>gpt2-xl</td>
+                        <td>14.7951</td>
+                        <td>15.89</td>
+                        <td>15.1148</td>
+                        <td>14.9297</td>
+                    </tr>
+                </table>
+            </div>
+            ]]>
+        </content>
+    </entry>
     <entry>
         <title type="text">Inside Apple's 2023 Transformer Models</title>
         <link rel="alternate" type="text/html"
