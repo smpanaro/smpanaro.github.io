@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta name="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="author" content="Stephen Panaro">
+    <meta name="keywords"
+        content="Stephen Panaro, blog">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link type="application/atom+xml" rel="alternate" href="/feed.xml" title="Atom">
+    <meta property="og:title" content="Deploying ModernBERT on Apple Neural Engine">
+    <meta property="og:url" content="https://stephenpanaro.com/blog/modernbert-on-apple-neural-engine">
+    <meta property="og:type" content="article">
+    <meta property="og:description"
+        content="Let's optimize ModernBERT for both speed and accuracy on Apple Neural Engine…">
+    <meta property="og:image"
+        content="https://stephenpanaro.com/static/blog/modernbert-on-apple-neural-engine/header-image.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="twitter:domain" content="stephenpanaro.com">
+    <meta property="twitter:url" content="https://stephenpanaro.com/blog/modernbert-on-apple-neural-engine">
+    <meta name="twitter:title" content="Deploying ModernBERT on Apple Neural Engine">
+    <meta name="twitter:description"
+        content="Let's optimize ModernBERT for both speed and accuracy on Apple Neural Engine…">
+    <meta name="twitter:image"
+        content="https://stephenpanaro.com/static/blog/modernbert-on-apple-neural-engine/header-image.png">
+
+    <meta name="description"
+        content="Let's optimize ModernBERT for both speed and accuracy on Apple Neural Engine…">
+    <title>Deploying ModernBERT on Apple Neural Engine</title>
+
+    <style>
+        body {
+            font-family: -apple-system, Arial, Helvetica, sans-serif;
+            font-size: 16px;
+            line-height: 22px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #191919;
+                color: #f6f6f6;
+            }
+        }
+
+        a {
+            color: unset;
+        }
+
+        header div {
+            display: flex;
+            gap: 8px;
+        }
+
+        article {
+            max-width: 600px;
+        }
+
+        h1 {
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            margin-top: 48px;
+        }
+
+        img {
+            max-width: 100%;
+            border-radius: 4px;
+        }
+
+        code {
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        code.codeblock {
+            white-space: pre;
+            page-break-inside: avoid;
+            max-width: 100%;
+            overflow: auto;
+            display: block;
+            word-wrap: break-word;
+        }
+
+        code > .comment {
+            opacity: 0.5;
+        }
+
+        span.subhead {
+            opacity: 0.5;
+            font-style: italic;
+        }
+
+        .block-center {
+            display: block;
+            margin: auto;
+        }
+
+        .image-caption {
+            opacity: 0.6;
+        }
+
+        table {
+            margin: 40px 0;
+        }
+
+        /* style all results the same */
+        table.results-table {
+            border-collapse: collapse;
+        }
+
+        table.results-table th {
+            text-align: left;
+            font-size: 12px;
+            opacity: 0.6;
+            white-space: nowrap;
+        }
+
+        table.results-table td,
+        table.results-table th {
+            padding: 4px 8px;
+        }
+
+        table.results-table th {
+            padding-left: 0px;
+            padding-right: 20px;
+        }
+
+        /* table.results-table th, */
+        table.results-table> :not(tfoot) td {
+            border: 1px solid;
+            white-space: nowrap;
+        }
+
+        td.mono {
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .inline-aside,
+        .sup-aside {
+            opacity: 0.5;
+        }
+
+        .sup-aside {
+            font-weight: 300;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div>
+            <span>stephen &bull;</span>
+            <a href="/">home</a>
+            <a href="/blog">blog</a>
+            <a href="/feed.xml">rss</a>
+        </div>
+    </header>
+
+    <article>
+        <h1>
+            Deploying ModernBERT on Apple Neural Engine
+        </h1>
+        <span class="subhead">How to make it both fast and accurate &bull; January 14, 2025</span>
+
+        <p>
+            The recently released ModernBERT model is exciting. It takes several advances from recent decoder-only LLMs (think Llama, ChatGPT) and applies them to the encoder-only model that started it all: BERT.
+        </p>
+
+        <p>
+            BERT-style models don't generate text but they are adept at understanding it. You can adapt (finetune) them for your custom problems, and they are small which makes them easy to deploy.
+        </p>
+
+        <p>
+            They are small enough in fact that you can even embed them in an app and have them run on your phone.
+        </p>
+
+        <p>
+            Apple devices all come with a special chip, the Apple Neural Engine (ANE), that is ideal for this type of model. Let's see what it takes to get it running!
+        </p>
+
+        <p>
+            (Spoiler: if you've done this before, it's trickier than you might expect.)
+        </p>
+
+        <h2>Baseline</h2>
+        <p>
+            Let's do the bare minimum as a starting point. We can take the official model from HuggingFace and use Apple's coremltools to convert it to CoreML format. This format is required to utilize the ANE hardware.
+        </p>
+
+        <p>
+            Conversion is straightforward:
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 30px 0;">
+from transformers import AutoModelForMaskedLM
+import torch
+import coremltools as ct
+import numpy as np
+
+class Model(torch.nn.Module):
+    def __init__(self):
+        super(Model, self).__init__()
+        self.model = AutoModelForMaskedLM.from_pretrained(
+            "answerdotai/ModernBERT-base"
+        )
+    def forward(self, input_ids, attention_mask):
+        return self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask).logits
+
+model = Model().eval()
+input_ids = torch.zeros((1, 1024), dtype=torch.int32)
+mask = torch.ones_like(input_ids)
+ct.convert(
+    torch.jit.trace(model, (input_ids, mask)),
+    inputs=[
+        ct.TensorType(name="input_ids",
+                      shape=input_ids.shape,
+                      dtype=np.int32),
+        ct.TensorType(name="attention_mask",
+                      shape=mask.shape,
+                      dtype=np.int32,
+                      default_value=mask.numpy()),
+    ],
+    outputs=[ct.TensorType(name="logits")],
+    minimum_deployment_target=ct.target.macOS14,
+).save(f"ModernBERT-base-hf.mlpackage")
+        </code>
+
+        <p>
+            We can open the resulting model in Xcode and run a benchmark to see how fast it is.
+        </p>
+
+        <img  class="block-center" src="/static/blog/modernbert-on-apple-neural-engine/hf-baseline.png" alt="Xcode benchmark results for baseline huggingface ModernBERT CoreML model">
+        <sub class="block-center image-caption" style="text-align: center;">Focus on: Median prediction time (small=good). Compute unit mapping (purple=good).</sub>
+
+        <p>
+            These are solid results considering we've barely done anything so far. Almost the entire model runs on ANE and it's reasonably fast. Surprisingly, if we open the performance report in Instruments, we can see that >40% of the model's latency comes from the few operations that don't execute on ANE. So the ANE portion is much faster than it initially seemed!
+        </p>
+
+        <img  class="block-center" src="/static/blog/modernbert-on-apple-neural-engine/hf-baseline-trace.png" alt="Xcode benchmark Instruments trace for baseline huggingface ModernBERT CoreML model">
+        <sub class="block-center image-caption" style="text-align: center;">Representative prediction of the HF model. Notice: the CPU compute (large blue block) takes 138 of the 310ms! Most of the actual computation happens in 165ms on the Neural Engine.</sub>
+
+        <p>
+            Let's improve on this.
+        </p>
+
+        <h2>Hardware Optimizations</h2>
+        <p>
+            CoreML automatically optimizes models for efficient performance. Since we want to specifically target the ANE hardware, we will make modifications to further improve performance there.
+        </p>
+
+        <p>
+            The baseline HuggingFace implementation offers niceties like customizability and GPU optimizations. These aren't important for ANE so to make things easier we will re-implement the model in a single file a la nanoGPT.
+        </p>
+
+        <p>
+            The standard reference for this is Apple's 2022 post <a href="https://machinelearning.apple.com/research/neural-engine-transformers">"Deploying Transformers on the Apple Neural Engine"</a> which we will follow closely.
+        </p>
+
+        <p>
+            The main change is replacing all linear layers with 2D convolutions. Both can perform the matrix multiplications we need, but the ANE is better at convolutions.
+        </p>
+
+        <p>
+            Hand-in-hand with this, we will update all our inputs to be 4D tensors (think 4D matrix).
+        </p>
+
+        <p>
+            The HF model uses a linear layer to transform a 3D input tensor with shape (<u>B</u>atch, <u>S</u>equence, <u>C</u>hannel <u>In</u>put) to (B,S,<u>C</u>hannel <u>Out</u>put) using a learned weight matrix (Cout,Cin). Our equivalent convolution will transform a 4D tensor (B, Cin, 1, S) to (B,Cout,1,S) using a weight (Cout,Cin,1,1).
+        </p>
+
+        <p>
+            As you can see the resulting tensor shapes are the same, only in a different order.
+        </p>
+
+        <p>
+            These changes alone speed up the model, but we will also adopt the custom attention implementation detailed in the post for an additional speedboost.
+        </p>
+
+        <p>
+            We can confirm our re-implemented model is correct by comparing the output of our model to the HF model using a metric called KL Divergence. This measures the similarity of two distributions and a very small number is good.
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+&#x276f; python diff_torch.py
+comparing answerdotai/ModernBERT-base to &#x1f917;
+<span class="comment"># &hellip;</span>
+kl div: &plusmn; 9.7043e-08
+<sub class="block-center image-caption" style="text-align: center;">9.7e-08 is 0.000000097043</sub>
+        </code>
+
+        <p>
+        For a more subjective comparison, we can look at the model's top predictions for the sentence <code>"The ocean is full of [MASK]."</code>:
+        </p>
+
+        <table>
+            <tr style="text-align: left; font-size: 14px;">
+                <th style="padding-right: 32px;">Probability</th>
+                <th >[MASK] Replacement</th>
+            </tr>
+            <tr>
+                <td class="mono">0.1060</td>
+                <td>life</td>
+            </tr>
+            <tr>
+                <td class="mono">0.0593</td>
+                <td>sharks</td>
+            </tr>
+            <tr>
+                <td class="mono">0.0507</td>
+                <td>people</td>
+            </tr>
+            <tr>
+               <td class="mono">0.0406</td>
+               <td>fish</td>
+            </tr>
+        </table>
+
+        <p>
+            These are all reasonable completions, and their probabilities match the HF model exactly. Our new PyTorch model is looking good.
+        </p>
+
+        <h2>Speed and Accuracy</h2>
+        We can convert our new optimized PyTorch model to CoreML just like before. As expected, it is faster:
+
+        <img  class="block-center" src="/static/blog/modernbert-on-apple-neural-engine/optimized-xcode.png" alt="Xcode benchmark results for ANE-optimized ModernBERT CoreML model">
+        <sub class="block-center image-caption" style="text-align: center;">Faster and more purple.</sub>
+
+        <p>
+            Looking at the performance report explains why. The large chunk of CPU computation we were doing at the end of the model has moved from CPU to ANE (the final blue CPU block is absent from the report). Despite this extra computation, the ANE section is also ~20% faster (165ms &rarr; 123ms).
+        </p>
+
+        <img class="block-center" src="/static/blog/modernbert-on-apple-neural-engine/optimized-trace.png" alt="Xcode benchmark Instruments trace for ANE-optimized ModernBERT CoreML model">
+        <sub class="block-center image-caption" style="text-align: center;">Instruments trace of a representative prediction with the optimized model.</sub>
+
+        <p>
+            So speed is good, what about accuracy? Let's check the KL divergence of our CoreML model and HuggingFace.
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+&#x276f; python diff_coreml.py answerdotai-ModernBERT-base-1024-optimized.mlpackage "The ocean is full of [MASK]."
+KL Divergence
+Sequence only (excl. padding): 4.35444974899292
+<sub class="block-center image-caption" style="text-align: center;">or 4.35e0</sub>
+        </code>
+
+        <p>
+            Oh no! This is many orders of magnitude larger. Our model is fast but it has lost some accuracy.
+        </p>
+
+        We can check this subjectively by looking at the same sentence from before <code>"The ocean is full of [MASK]."</code>:
+
+        <table>
+            <tr style="text-align: left; font-size: 14px;">
+                <th style="padding-right: 20px;">Probability</th>
+                <th style="padding-right: 20px;">[MASK] Replacement</th>
+                <th>&Delta; (%) to HF Probability</th>
+            </tr>
+            <tr>
+                <td class="mono">0.0644</td>
+                <td>people</td>
+                <td class="mono">+0.0137 (+27%)</td>
+            </tr>
+            <tr>
+                <td class="mono">0.0596</td>
+                <td>life</td>
+                <td class="mono">-0.0464 (-43%)</td>
+            </tr>
+            <tr>
+                <td class="mono">0.0394</td>
+                <td>sharks</td>
+                <td class="mono">-0.0199 (-33%)</td>
+            </tr>
+            <tr>
+               <td class="mono">0.0373</td>
+               <td>fish</td>
+               <td class="mono">-0.0033 (-8%)</td>
+            </tr>
+        </table>
+
+        <p>
+        "life" is no longer the top prediction and the probabilities have shifted noticeably.
+        </p>
+
+        <h2>Outliers</h2>
+        <p>
+            One feature of the ANE is that it uses float16 for computation.
+        </p>
+
+        <p>
+            float16 can only express numbers between -65k and +65k and the closer you get to those large values, the less accurate. (Floating point numbers work by only representing a finite subset of all possible numbers and that subset gets more spread out as values approach the extremes.)
+        </p>
+
+        <p>
+            These types of errors tend to compound in ML models, so they are a prime suspect for what we're seeing.
+        </p>
+
+        <p>
+            Fortunately they also tend to show up in predictable places for modern LLMs. We can simply print the maximum values for an example sentence to see what they look like.
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+class Block(nn.Module):
+    <span class="comment"># &hellip;</span>
+    def forward(self, x, position_ids, attention_mask, sliding_window_mask=None):
+        print(f"layer {self.layer_index} max: {x.abs().max().item()}")
+        <span class="comment"># &hellip;</span>
+        <sub class="block-center image-caption" style="text-align: center;">This is one of the places that large values can appear.</sub>
+        </code>
+
+        <p>
+            For <code>"The capital of France is [MASK]."</code> we get:
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+layer 0 max: 8.465672492980957
+layer 1 max: 21.899389266967773
+<span class="comment"># &hellip;</span>
+layer 11 max: 423.6680908203125
+layer 12 max: 9862.669921875
+<span class="comment"># &hellip;</span>
+layer 20 max: 19701.166015625
+layer 21 max: 19706.68359375
+        </code>
+
+        <p>
+            Just as expected, about halfway through the model we start to see large values that grow up to 20-30k, depending on the input text.
+        </p>
+
+        <p>
+            Let's compare this with the original BERT.
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+layer 0 max: 11.113615989685059
+layer 1 max: 10.009736061096191
+layer 2 max: 11.489322662353516
+layer 3 max: 14.738886833190918
+layer 4 max: 13.510597229003906
+layer 5 max: 13.328920364379883
+layer 6 max: 14.002219200134277
+layer 7 max: 13.596477508544922
+layer 8 max: 14.410932540893555
+layer 9 max: 14.204751014709473
+layer 10 max: 14.246857643127441
+layer 11 max: 15.104483604431152
+        </code>
+
+        <p>
+            These are much lower. This is very likely our problem.
+        </p>
+
+        <h2>Reducing Outliers with Rotations</h2>
+        <p>
+            Similar to how ModernBERT was trained using recent advances in decoder-only LLMs, we can borrow a technique used to quantize (compress) LLMs that should help with our outliers.
+        </p>
+
+        <p>
+            Outliers makes quantization tricky, so there are many different papers and approaches. One is particularly appealing.
+        </p>
+
+        <p>
+            Outliers show up due to the values in the learned weight matrices. For "reasons" models tend to settle on weight matrices that promote outliers in a few parts of the tensors the model is processing.
+        </p>
+
+        <p>
+            If our linear layer (or, equivalently, convolution) has a weight matrix W, and our input is a tensor X, then we can write the operation to compute the output Y as:
+        </p>
+
+<code class="codeblock" style="display: block; margin: 10px 0;">
+Y = X @ W
+<sub class="block-center image-caption" style="text-align: left;">@ is the PyTorch symbol for matrix multiplication</sub>
+</code>
+
+        <p>
+            The trick we will use to reduce outliers comes from two papers written at the same time: <a href="https://github.com/spcl/QuaRot/tree/main">QuaRot</a> and <a href="https://github.com/facebookresearch/SpinQuant">SpinQuant</a>.
+        </p>
+
+        <p>
+            Both use a special kind of matrix, an orthogonal rotation matrix, that has a property such that: <code>Q @ Q.T = I</code>. This means that multiplying the rotation matrix Q by its transpose (flipped across the diagonal) gives us the identity matrix I.
+        </p>
+
+        <p>
+        Since any matrix times I is itself, this allows us to rewrite our linear layer as:
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+Y = X @ I @ W
+  = X @ Q @ Q.T @ W
+  = (X @ Q) @ (Q.T @ W)
+  = X' @ W'
+        </code>
+
+        <p>
+        As long as we make sure that our new input to the linear layer is X' (original X times Q), we can replace the original weight with W' (Q.T times original W).
+        </p>
+
+        <p>
+            Another fun property of Q is that when we multiply other matrices by it, it reduces the outliers by "smearing" them across nearby non-outlier values.
+        </p>
+
+        <p>
+            So if we multiply all the weight matrices in our model by Q or Q.T in such a way that the Qs always cancel out, we should see lower outliers but still have a mathematically equivalent model. Pretty cool.
+        </p>
+
+        <img src="/static/blog/modernbert-on-apple-neural-engine/spinquant-activations.png" alt="3D plot of activation magnitudes before and after rotation from the SpinQuant paper" class="block-center">
+        <sub class="block-center image-caption" style="text-align: center;">From the SpinQuant paper. Notice the vertical axes go from 16 &rarr; 2.5 and 60 &rarr; 5 respectively.</sub>
+
+        <h2>A LayerNorm-Shaped Wrinkle</h2>
+        <p>
+            Unfortunately ModernBERT made two slightly contrarian choices that will make our lives a little tricky.
+        </p>
+
+        <p>
+            Most modern LLMs use a normalization function called RMSNorm. ModernBERT uses a different one, LayerNorm. QuaRot and SpinQuant only work for RMSNorm models.
+        </p>
+
+        <p>
+            The good news is that they provide a method to convert LayerNorm models into mathematically equivalent RMSNorm models.
+        </p>
+
+        <p>
+            The bad news is that this method won't work out of the box for us because of where ModernBERT puts its first LayerNorm.
+        </p>
+
+        <p>
+            Most models perform the first norm immediately before the first attention computation:
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+x = x + attention(layer_norm(x))
+        </code>
+
+        <p>
+            But ModernBERT does it slightly earlier:
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+x = layer_norm(x)
+x = x + attention(x)
+        </code>
+
+        <p>
+            If you are visually inclined, the difference is easy to spot when you look at the model graph for ModernBERT and compare it to a model that follows the more common practice:
+        </p>
+
+        <img src="/static/blog/modernbert-on-apple-neural-engine/layer-norm-location.png" alt="netron graph of layernorm in normal transformer and modernbert" class="block-center">
+        <sub class="block-center image-caption" style="text-align: center;">QuaRot+SpinQuant only describe how to handle the "normal" transformer case.</sub>
+
+        <p>
+            Naively wedging this LayerNorm into the same conversion method as the others destroys the model's mathematical equivalence and its outputs. If we work the math out by hand (which I will spare you) we can actually find a way to make it work by inserting a single extra matrix multiplication in the form of a convolution:
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+x = rms_norm(x)
+residual_x = x @ R
+x = residual_x + attention(x)
+        </code>
+
+        <p>
+            The R matrix performs the operations that we would lose otherwise when replacing the LayerNorm with RMSNorm. An extra convolution would be nice to avoid, but its cost is relatively small compared to the rest of the model (only 0.19% of the model parameters).
+        </p>
+
+        <p>
+            Most importantly it allows us to apply the Q matrix to reduce our outliers.
+        </p>
+
+        <h2>Rotated CoreML Model</h2>
+        <p>
+            Now we can take our original model, replace all LayerNorms with RMSNorm, insert our single extra convolution, and then replace all convolution weights with versions that are multiplied by the rotation matrix Q.
+        </p>
+
+        <p>
+            We can see it closely matches the HF model:
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+&#x276f; python diff_torch.py
+comparing answerdotai/ModernBERT-base to &#x1f917;
+<span class="comment"># &hellip;</span>
+kl div: &plusmn; 1.0101e-07
+        </code>
+
+        <p>
+            Even though the rotated model is mathematically equivalent, we don't expect a perfect match in practice due to floating point errors. This lines up with the KL divergence we see.
+        </p>
+        <p>
+            When we convert it to CoreML as before, we can see that our CoreML-to-HF KL divergence is much improved:
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+&#x276f; python diff_coreml.py answerdotai-ModernBERT-base-1024.mlpackage "The ocean is full of [MASK]."
+KL Divergence
+Sequence only (excl. padding): 0.00017806502000894397
+<sub class="block-center image-caption" style="text-align: center;">this is 1.78e-4</sub>
+        </code>
+
+        <p>
+            And for our test sentence <code>"The ocean is full of [MASK]."</code>, the order now matches HF and the probabilities are much closer:
+        </p>
+
+        <table style="">
+            <tr style="text-align: left; font-size: 14px;">
+                <th style="padding-right: 20px;">Probability</th>
+                <th style="padding-right: 20px;">[MASK] Replacement</th>
+                <th>&Delta; (%) to HF Probability</th>
+            </tr>
+            <tr>
+                <td class="mono">0.1058</td>
+                <td>life</td>
+                <td class="mono">-0.0002 (-0.1%)</td>
+            </tr>
+            <tr>
+                <td class="mono">0.0617</td>
+                <td>sharks</td>
+                <td class="mono">+0.0024 (+4%)</td>
+            </tr>
+            <tr>
+                <td class="mono">0.0496</td>
+                <td>people</td>
+                <td class="mono">-0.0011 (-2%)</td>
+            </tr>
+            <tr>
+               <td class="mono">0.0408</td>
+               <td>fish</td>
+               <td class="mono">+0.0002 (+0.4%)</td>
+            </tr>
+        </table>
+
+        <p>
+            Excellent! Examining the outliers again, we can also see that they are greatly reduced (though still larger than BERT):
+        </p>
+
+        <code class="codeblock" style="display: block; margin: 10px 0;">
+layer 0 max: 3.542017936706543
+layer 1 max: 4.122846603393555
+<span class="comment"># &hellip;</span>
+layer 11 max: 66.40872955322266
+layer 12 max: 769.3683471679688
+<span class="comment"># &hellip;</span>
+layer 20 max: 1025.390869140625
+layer 21 max: 1023.6306762695312
+        </code>
+
+        <p>
+            The Xcode benchmark results are also still just as fast. It seems the extra convolution has negligible cost.
+        </p>
+
+        <img class="block-center" src="/static/blog/modernbert-on-apple-neural-engine/rotated-xcode.png" alt="Xcode benchmark results for ANE-optimized ModernBERT CoreML model with rotations">
+        <sub class="block-center image-caption" style="text-align: center;">Same speed, same purple.</sub>
+
+        <p>
+            Now we have a model that is both fast <i>and</i> accurate!
+        </p>
+
+        <h2>What's Now/What's Next</h2>
+        <p>
+            This is a solid starting point for ModernBERT on Apple Neural Engine.
+        </p>
+
+        <p>
+            The code to convert and use your own CoreML models is available on <a href="https://github.com/smpanaro/ModernBERT-AppleNeuralEngine">GitHub</a>. Part of the motivation for re-implementing it in the nanoGPT-style was to make it easily hackable. The README has ideas for several areas that could be explored or improved.
+        </p>
+
+        <p>
+            The most exciting one to me is adding support for different model heads. These are what allows BERT-style models to adapt to different tasks and makes them actually useful.
+        </p>
+
+        <p>
+            Feel free to reach out to me on <a href="https://twitter.com/flat">twitter</a> or <a href="https://github.com/smpanaro/ModernBERT-AppleNeuralEngine">GitHub</a> if this is interesting to you!
+        </p>
+
+        <hr />
+    </article>
+
+    <footer>
+        Comments or thoughts? Find me on <a href="https://twitter.com/flat">twitter</a> or <a
+            href="https://mastodon.social/@smpanaro">mastodon</a>.
+        <br />
+        <br />
+        <a href="/">home</a> &bull; <a href="/blog">blog</a> &bull; <a href="/feed.xml">rss</a>
+    </footer>
+</body>
+
+</html>
